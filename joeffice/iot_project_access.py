@@ -20,7 +20,7 @@ except ImportError:
     print("   pip install mysql-connector-python")
     sys.exit(1)
 
-from_class = uic.loadUiType("iot_project.ui")[0]
+from_class = uic.loadUiType("iot_project_access.ui")[0]
 
 
 # ==========================
@@ -70,6 +70,44 @@ class Receiver(QThread):
         self.is_running = False
         print("recv stop")
 
+# 냉난방 시스템 =======================
+class HvacReader(QThread):
+    line_rx = pyqtSignal(str)
+    def __init__(self, ser, parent=None):
+        super().__init__(parent)
+        self.ser = ser
+        self._run = False
+    def run(self):
+        if not self.ser:
+            return
+        self._run = True
+        buf = b""
+        try:
+            self.ser.reset_input_buffer()
+        except Exception:
+            pass
+        while self._run and self.ser and self.ser.is_open:
+            try:
+                chunk = self.ser.read(64)
+                if not chunk:
+                    continue
+                buf += chunk
+                while b"\n" in buf or b"\r" in buf:
+                    for sep in (b"\r\n", b"\n", b"\r"):
+                        if sep in buf:
+                            line, buf = buf.split(sep, 1)
+                            s = line.decode("utf-8", errors="ignore").strip()
+                            if s:
+                                self.line_rx.emit(s)
+                            break
+                    else:
+                        break
+            except Exception:
+                break
+    def stop(self):
+        self._run = False
+# 냉난방 시스템 =============================
+
 
 # ==========================
 #  메인 다이얼로그
@@ -78,6 +116,14 @@ class MyDialog(QDialog, from_class):
     def __init__(self):
         super().__init__()
         self.setupUi(self)
+        self.conn = None  # RFID 포트 초기화
+        self.hvac_conn = None # HVAC 포트 초기화
+        self.hvac_recv = None # HVAC 수신 스레드
+
+# 냉난방 시스템 ===============================
+        self._hvac_enabled_cache = None  # 마지막으로 보낸 enable 값(변화 있을 때만 전송)
+        self._auto_hvac = True          # 자동 전송 on/off (필요시 False로 바꾸면 수동만)
+# 냉난방 시스템 =====================================
 
         # 설정: 중복 태깅 쿨다운(초)
         self.cooldown_secs = 10
@@ -92,6 +138,16 @@ class MyDialog(QDialog, from_class):
         else:
             self.recv = None
             self.uidLabel.setText("오프라인 모드: 카드 대주세요 (RFID 미연결)")
+
+# 냉난방 시스템 =============================================
+        # RFID 포트는 self.conn으로 이미 열려 있음
+        self.hvac_conn = self.try_open_hvac_serial(exclude=self.conn.port if self.conn else None)
+        if self.hvac_conn:
+            print(f"[SERIAL] HVAC connected: {self.hvac_conn.port}")
+        else:
+            print("[SERIAL] HVAC not connected (off-line mode)")
+# 냉난방 시스템 ========================================================
+
 
         # DB/유저 로드
         self.init_db()
@@ -123,6 +179,109 @@ class MyDialog(QDialog, from_class):
         # 단축키
         QShortcut(QKeySequence("Delete"), self, activated=self.delete_selected_rows)
         QShortcut(QKeySequence("F5"), self, activated=self.reconnect_serial)
+
+# ======================== 냉난방 시스템 여기 추가함 ===============================
+        # === HVAC 제어 상태/단축키 ===
+        # self._hvac_enabled_cache = None  # 마지막으로 보낸 enable 값(변화 있을 때만 전송)
+        # self._auto_hvac = True          # 자동 전송 on/off (필요시 False로 바꾸면 수동만)
+
+        # 수동 단축키: Ctrl+1=HE 1, Ctrl+0=HE 0, Ctrl+R=HR
+        QShortcut(QKeySequence("Ctrl+1"), self, activated=lambda: self.send_he(True))
+        QShortcut(QKeySequence("Ctrl+0"), self, activated=lambda: self.send_he(False))
+        # QShortcut(QKeySequence("Ctrl+R"), self, activated=self.send_hr)
+
+
+        # (옵션) 주기 상태 폴링: 10초마다 HR
+        # self._hr_timer = QTimer(self)
+        # self._hr_timer.setInterval(10000)
+        # self._hr_timer.timeout.connect(self.send_hr)
+        # self._hr_timer.start()
+
+        # --------- HVAC 직렬 명령 ----------
+    # def _serial_send_line(self, text: str):
+    #     """줄 단위 전송(CRLF)"""
+    #     if not (self.conn and getattr(self.conn, "is_open", False)):
+    #         print("[SERIAL] not connected; skip:", text)
+    #         return
+    #     try:
+    #         self.conn.write((text + "\r\n").encode("utf-8"))
+    #         print("[TX]", text)
+    #     except Exception as e:
+    #         print("[SERIAL][ERROR] write:", e)
+
+    def _serial_send_line(self, text: str):
+        """HVAC 포트가 있으면 그쪽으로, 없으면 기존 RFID conn으로 보냄"""
+        ser = None
+        if hasattr(self, "hvac_conn") and self.hvac_conn and getattr(self.hvac_conn, "is_open", False):
+            ser = self.hvac_conn
+        elif self.conn and getattr(self.conn, "is_open", False):
+            ser = self.conn
+        else:
+            print("[SERIAL] not connected; skip:", text)
+            return
+        try:
+            ser.write((text + "\r\n").encode("utf-8"))
+            print(f"[TX] {text} -> {ser.port}")
+        except Exception as e:
+            print("[SERIAL][ERROR] write:", e)
+
+
+    def send_he(self, enable: bool):
+        self._serial_send_line(f"HE {'1' if enable else '0'}")
+        self._hvac_enabled_cache = enable  # 수동 보낸 경우 캐시 갱신
+
+    # def send_hr(self):
+    #     self._serial_send_line("HR")
+
+    def try_open_hvac_serial(self, exclude=None, baudrate=9600):
+        """RFID 포트(exclude)를 제외한 다른 ttyACM/ttyUSB를 찾아 HVAC용으로 연다."""
+        try:
+            import serial.tools.list_ports as lp
+            ports = [p.device for p in lp.comports()]
+            # 우선순위 간단: exclude 제외 + ttyACM/ttyUSB
+            for dev in ports:
+                if exclude and dev == exclude:
+                    continue
+                if "ttyACM" in dev or "ttyUSB" in dev:
+                    try:
+                        s = serial.Serial(port=dev, baudrate=baudrate, timeout=1)
+                        return s
+                    except Exception:
+                        continue
+            return None
+        except Exception as e:
+            print("[SERIAL][HVAC] scan failed:", e)
+            return None
+        
+    # -------- HVAC 직렬 명령 --------
+    def _serial_send_line(self, text: str):
+        """HVAC 포트가 있으면 그쪽으로, 없으면 기존 RFID conn으로 보냄"""
+        ser = None
+        if hasattr(self, "hvac_conn") and self.hvac_conn and getattr(self.hvac_conn, "is_open", False):
+            ser = self.hvac_conn
+        elif self.conn and getattr(self.conn, "is_open", False):
+            ser = self.conn
+        else:
+            print("[SERIAL] not connected; skip:", text)
+            return
+        try:
+            ser.write((text + "\r\n").encode("utf-8"))
+            print("[TX]", text, "->", ser.port)
+        except Exception as e:
+            print("[SERIAL][ERROR] write:", e)
+
+    def send_he(self, enable: bool):
+        self._serial_send_line(f"HE {'1' if enable else '0'}")
+        self._hvac_enabled_cache = enable  # 캐시 갱신(자동 제어에서 사용)
+
+    def send_hr(self):
+        self._serial_send_line("HR")
+
+
+
+# ============================================================
+
+
 
     # ---------------- 시리얼 도우미 ----------------
     def try_open_serial(self, port="/dev/ttyACM0", baudrate=9600):
@@ -403,6 +562,11 @@ class MyDialog(QDialog, from_class):
         print(f"[ATTEND] {now_ts} {uid_hex} {name} {company} -> {action}")
         self.uidLabel.setText(f"{uid_hex}")
         self.refresh_all_views()
+
+        # 냉난방 시스템 추가 부분 =====================
+        pc = self._present_count(today)
+        self._maybe_send_hvac_by_occupancy(pc)
+        # ==========================================
 
 
     # ---------------- 신규 사용자 등록 ----------------
@@ -882,6 +1046,22 @@ class MyDialog(QDialog, from_class):
             self.label_2.setText(f"실시간 근무 인원: {n}명")
         except Exception:
             pass
+
+# 냉난방 시스템 추가 부분 ============================
+        self._maybe_send_hvac_by_occupancy(n)  # 인원 변화에 따라 HE 자동 전송
+
+    def _maybe_send_hvac_by_occupancy(self, present_count: int):
+        """
+        present_count > 0이면 HE 1, ==0이면 HE 0.
+        마지막으로 보낸 값과 달라질 때만 전송.
+        """
+        if not self._auto_hvac:
+            return
+        want_enable = (present_count > 0)
+        if self._hvac_enabled_cache is None or self._hvac_enabled_cache != want_enable:
+            self.send_he(want_enable)  # 내부에서 캐시 갱신됨
+            print(f"[HVAC] auto {'ENABLE' if want_enable else 'DISABLE'} (present={present_count})")
+# =======================================
 
     def fetch_today_attendees(self):
         """오늘 최초 IN(FIRST_IN 포함) 시간"""
