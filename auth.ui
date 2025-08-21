@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>AuthWindow</class>
+ <widget class="QMainWindow" name="AuthWindow">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>400</width>
+    <height>300</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>사용자 인증</string>
+  </property>
+  <widget class="QWidget" name="centralwidget">
+   <layout class="QVBoxLayout" name="verticalLayout">
+    <item>
+     <layout class="QHBoxLayout" name="horizontalLayout">
+      <item>
+       <widget class="QLabel" name="idLabel">
+        <property name="text">
+         <string>사번/ID:</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLineEdit" name="idInput"/>
+      </item>
+     </layout>
+    </item>
+    <item>
+     <widget class="QPushButton" name="rfidBtn">
+      <property name="text">
+       <string>RFID 인증</string>
+      </property>
+     </widget>
+    </item>
+    <item>
+     <widget class="QPushButton" name="loginBtn">
+      <property name="text">
+       <string>로그인</string>
+      </property>
+     </widget>
+    </item>
+    <item>
+     <widget class="QPushButton" name="testBtn">
+      <property name="text">
+       <string>시험용 로그인 (성공)</string>
+      </property>
+     </widget>
+    </item>
+    <item>
+     <widget class="QLabel" name="statusLabel">
+      <property name="text">
+       <string>상태: 대기</string>
+      </property>
+      <property name="alignment">
+       <set>Qt::AlignmentFlag::AlignCenter</set>
+      </property>
+     </widget>
+    </item>
+   </layout>
+  </widget>
+  <widget class="QStatusBar" name="statusbar"/>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>HomeWindow</class>
+ <widget class="QMainWindow" name="HomeWindow">
+  <property name="geometry">
+   <rect><x>0</x><y>0</y><width>600</width><height>400</height></rect>
+  </property>
+  <property name="windowTitle">
+   <string>홈 - 회의실 관리 시스템</string>
+  </property>
+  <widget class="QWidget" name="centralwidget">
+   <layout class="QVBoxLayout" name="verticalLayout">
+    <item><widget class="QLabel" name="welcomeLabel"><property name="text"><string>환영합니다! (권한: [ROLE])</string></property><property name="alignment"><set>AlignCenter</set></property></widget></item>
+    <item>
+     <layout class="QHBoxLayout">
+      <item><widget class="QPushButton" name="reservationBtn"><property name="text"><string>예약 관리</string></property></widget></item>
+      <item><widget class="QPushButton" name="usageBtn"><property name="text"><string>이용 현황</string></property></widget></item>
+     </layout>
+    </item>
+    <item>
+     <layout class="QHBoxLayout">
+      <item><widget class="QPushButton" name="extraBtn"><property name="text"><string>부가 기능</string></property></widget></item>
+      <item><widget class="QPushButton" name="integrationBtn"><property name="text"><string>통합 관리</string></property></widget></item>
+     </layout>
+    </item>
+    <item><widget class="QLabel" name="statusLabel"><property name="text"><string>상태: 대기</string></property><property name="alignment"><set>AlignCenter</set></property></widget></item>
+   </layout>
+  </widget>
+  <widget class="QStatusBar" name="statusbar"/>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
