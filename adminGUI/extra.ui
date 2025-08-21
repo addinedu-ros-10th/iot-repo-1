@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>ExtraWindow</class>
+ <widget class="QMainWindow" name="ExtraWindow">
+  <property name="geometry">
+   <rect><x>0</x><y>0</y><width>600</width><height>500</height></rect>
+  </property>
+  <property name="windowTitle">
+   <string>부가 기능</string>
+  </property>
+  <widget class="QWidget" name="centralwidget">
+   <layout class="QVBoxLayout" name="verticalLayout">
+    <item>
+     <widget class="QGroupBox" name="repeatGroup">
+      <property name="title">
+       <string>반복 예약</string>
+      </property>
+      <layout class="QVBoxLayout" name="verticalLayout_2">
+       <item>
+        <layout class="QHBoxLayout">
+         <item><widget class="QLabel" name="repeatLabel"><property name="text"><string>반복 주기:</string></property></widget></item>
+         <item><widget class="QComboBox" name="repeatCombo"><item><property name="text"><string>매주</string></property></item><item><property name="text"><string>매월</string></property></item></widget></item>
+        </layout>
+       </item>
+       <item><widget class="QPushButton" name="repeatBtn"><property name="text"><string>반복 예약 설정</string></property></widget></item>
+      </layout>
+     </widget>
+    </item>
+    <item>
+     <widget class="QGroupBox" name="equipmentGroup">
+      <property name="title">
+       <string>회의실 장비 연동</string>
+      </property>
+      <layout class="QVBoxLayout" name="verticalLayout_3">
+       <item><widget class="QLabel" name="equipmentLabel"><property name="text"><string>장비 상태: 대기</string></property></widget></item>
+       <item><widget class="QPushButton" name="toggleEquipmentBtn"><property name="text"><string>장비 ON/OFF</string></property></widget></item>
+      </layout>
+     </widget>
+    </item>
+    <item>
+     <widget class="QGroupBox" name="notificationGroup">
+      <property name="title">
+       <string>알림 기능</string>
+      </property>
+      <layout class="QVBoxLayout" name="verticalLayout_4">
+       <item><widget class="QCheckBox" name="emailCheck"><property name="text"><string>이메일 알림</string></property></widget></item>
+       <item><widget class="QCheckBox" name="pushCheck"><property name="text"><string>앱 푸시 알림</string></property></widget></item>
+       <item><widget class="QPushButton" name="sendNotificationBtn"><property name="text"><string>알림 설정 저장</string></property></widget></item>
+      </layout>
+     </widget>
+    </item>
+    <item>
+     <widget class="QGroupBox" name="envGroup">
+      <property name="title">
+       <string>회의실 환경 상태 표시</string>
+      </property>
+      <layout class="QVBoxLayout" name="verticalLayout_5">
+       <item><widget class="QLabel" name="pmLabel"><property name="text"><string>미세먼지: 0 µg/m³</string></property></widget></item>
+       <item><widget class="QLabel" name="tempLabel"><property name="text"><string>온도: 25°C</string></property></widget></item>
+       <item><widget class="QLabel" name="lightLabel"><property name="text"><string>조도: 500 lux</string></property></widget></item>
+       <item><widget class="QPushButton" name="refreshEnvBtn"><property name="text"><string>환경 상태 새로고침</string></property></widget></item>
+      </layout>
+     </widget>
+    </item>
+    <item>
+     <widget class="QGroupBox" name="statsGroup">
+      <property name="title">
+       <string>통계/리포트</string>
+      </property>
+      <layout class="QVBoxLayout" name="verticalLayout_6">
+       <item><widget class="QLabel" name="usageLabel"><property name="text"><string>사용률: 0%</string></property></widget></item>
+       <item><widget class="QLabel" name="cancelLabel"><property name="text"><string>취소율: 0%</string></property></widget></item>
+       <item><widget class="QLabel" name="peakLabel"><property name="text"><string>피크 시간대: 미정</string></property></widget></item>
+       <item><widget class="QPushButton" name="generateReportBtn"><property name="text"><string>리포트 생성</string></property></widget></item>
+      </layout>
+     </widget>
+    </item>
+   </layout>
+  </widget>
+  <widget class="QStatusBar" name="statusbar"/>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
