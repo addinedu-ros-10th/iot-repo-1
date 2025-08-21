@@ -11,7 +11,6 @@ void loop() {
   // 시리얼로 들어온 데이터가 있으면
   if (Serial.available() > 0) {
     String data = Serial.readStringUntil('\n'); // 줄 끝까지 읽기
-    // data.trim(); // 공백/엔터 제거
 
     // FIRST_IN 또는 IN → LED 켜기
     if (data == "FIRST_IN" || data == "IN") {
