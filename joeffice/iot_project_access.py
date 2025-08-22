@@ -1,18 +1,15 @@
-# users_test -> users로 table 변경 한 것
-
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import sys
+import sys, os, csv
 from PyQt6.QtWidgets import *
 from PyQt6.QtCore import *
 from PyQt6.QtGui import QKeySequence, QShortcut
 from PyQt6 import uic
 import serial
+import serial.tools.list_ports as lp
 from datetime import datetime, date, timedelta
 from zoneinfo import ZoneInfo
-import csv
-import os
 
 # --- MySQL 커넥터 로드 ---
 try:
@@ -34,27 +31,26 @@ class Receiver(QThread):
     def __init__(self, conn, parent=None):
         super().__init__(parent)
         self.conn = conn
-        self.is_running = False
 
     def run(self):
         if self.conn is None:
             return
-        print("recv start")
-        self.is_running = True
+        print("[RFID] recv start")
         try:
             self.conn.reset_input_buffer()
         except Exception as e:
             print("[SERIAL][WARN] reset_input_buffer:", e)
 
-        while self.is_running:
+        while not self.isInterruptionRequested():
             try:
-                line = self.conn.read_until(b"\n")
+                line = self.conn.read_until(b"\n")  # timeout=1 로 설정되어 있으면 주기적으로 빠져나옴
             except Exception as e:
                 print("[SERIAL][ERROR] read_until:", e)
                 continue
 
             if not line:
                 continue
+
             try:
                 msg = line.decode("utf-8", errors="ignore").strip()
             except Exception:
@@ -68,27 +64,29 @@ class Receiver(QThread):
                 else:
                     print("[WARN] invalid UID:", msg)
 
-    def stop(self):
-        self.is_running = False
-        print("recv stop")
+        print("[RFID] recv stop")
 
-# 냉난방 시스템 =======================
+    def stop(self):
+        self.requestInterruption()
+
+
+# (옵션) HVAC 수신 스레드 – 현재는 미사용이지만 틀만 남겨둠
 class HvacReader(QThread):
     line_rx = pyqtSignal(str)
     def __init__(self, ser, parent=None):
         super().__init__(parent)
         self.ser = ser
-        self._run = False
+
     def run(self):
         if not self.ser:
             return
-        self._run = True
+        print("[HVAC] reader start")
         buf = b""
         try:
             self.ser.reset_input_buffer()
         except Exception:
             pass
-        while self._run and self.ser and self.ser.is_open:
+        while not self.isInterruptionRequested() and self.ser and self.ser.is_open:
             try:
                 chunk = self.ser.read(64)
                 if not chunk:
@@ -106,9 +104,107 @@ class HvacReader(QThread):
                         break
             except Exception:
                 break
+        print("[HVAC] reader stop")
+
     def stop(self):
-        self._run = False
-# 냉난방 시스템 =============================
+        self.requestInterruption()
+
+
+# ==========================
+#  BOOKED 예약 조회 다이얼로그
+# ==========================
+class ReservationViewer(QDialog):
+    def __init__(self, db, parent=None):
+        super().__init__(parent)
+        self.db = db
+        self.setWindowTitle("예약 현황 (BOOKED)")
+        self.resize(900, 500)
+
+        # 위젯
+        self.table = QTableWidget(self)
+        self.table.setColumnCount(6)
+        self.table.setHorizontalHeaderLabels(
+            ["이름", "회사", "회의실", "시작", "종료", "인증코드"]
+        )
+        self.table.horizontalHeader().setStretchLastSection(True)
+        self.table.verticalHeader().setVisible(False)
+        self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.table.setAlternatingRowColors(True)
+        self.table.setSortingEnabled(True)
+
+        self.btnRefresh = QPushButton("새로고침", self)
+        self.btnClose = QPushButton("닫기", self)
+
+        # 레이아웃
+        v = QVBoxLayout(self)
+        v.addWidget(self.table)
+        h = QHBoxLayout()
+        h.addStretch(1)
+        h.addWidget(self.btnRefresh)
+        h.addWidget(self.btnClose)
+        v.addLayout(h)
+
+        # 시그널
+        self.btnRefresh.clicked.connect(self.reload)
+        self.btnClose.clicked.connect(self.close)
+
+        # 첫 로드
+        self.reload()
+
+    def _fmt_dt(self, v):
+        if isinstance(v, datetime):
+            return v.strftime("%Y-%m-%d %H:%M:%S")
+        return "" if v is None else str(v)
+
+    def reload(self):
+        try:
+            cur = self.db.cursor()
+            cur.execute(
+                """
+                SELECT
+                    COALESCE(NULLIF(name,''),      'Unknown')  AS name,
+                    COALESCE(NULLIF(company,''),   'Unknown')  AS company,
+                    COLESCE(NULLIF(room_name,''),  'Unknown')  AS room_name
+                FROM reservations
+                WHERE 1=0
+                """
+            )
+            cur.close()
+        except Exception:
+            # 위의 더미 쿼리는 일부 호스트에서 첫 커넥트 지연 방지용. 실패해도 무시.
+            pass
+
+        try:
+            cur = self.db.cursor()
+            cur.execute(
+                """
+                SELECT
+                    COALESCE(NULLIF(name,''),      'Unknown')  AS name,
+                    COALESCE(NULLIF(company,''),   'Unknown')  AS company,
+                    COALESCE(NULLIF(room_name,''), 'Unknown')  AS room_name,
+                    start_time,
+                    end_time,
+                    auth_code
+                FROM reservations
+                WHERE reservation_status = 'BOOKED'
+                ORDER BY start_time ASC
+                """
+            )
+            rows = cur.fetchall()
+            cur.close()
+        except Exception as e:
+            QMessageBox.critical(self, "DB 오류", f"예약 조회 실패:\n{e}")
+            return
+
+        self.table.setRowCount(len(rows))
+        for r, (name, company, room, st, et, code) in enumerate(rows):
+            vals = [name, company, room, self._fmt_dt(st), self._fmt_dt(et), "" if code is None else str(code)]
+            for c, val in enumerate(vals):
+                it = QTableWidgetItem(val)
+                it.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                self.table.setItem(r, c, it)
+        self.table.resizeColumnsToContents()
 
 
 # ==========================
@@ -118,38 +214,36 @@ class MyDialog(QDialog, from_class):
     def __init__(self):
         super().__init__()
         self.setupUi(self)
-        self.conn = None  # RFID 포트 초기화
-        self.hvac_conn = None # HVAC 포트 초기화
-        self.hvac_recv = None # HVAC 수신 스레드
 
-# 냉난방 시스템 ===============================
-        self._hvac_enabled_cache = None  # 마지막으로 보낸 enable 값(변화 있을 때만 전송)
-        self._auto_hvac = True          # 자동 전송 on/off (필요시 False로 바꾸면 수동만)
-# 냉난방 시스템 =====================================
+        # 직렬 핸들
+        self.conn = None        # RFID 포트
+        self.recv = None        # RFID 수신 스레드
+        self.hvac_conn = None   # HVAC 포트
+        self.hvac_recv = None   # HVAC 수신 스레드(현재 미사용)
+
+        # 냉난방 자동 제어 상태
+        self._hvac_enabled_cache = None  # 마지막 보낸 enable 상태
+        self._auto_hvac = True           # True면 인원수 기반 자동 HE 전송
 
         # 설정: 중복 태깅 쿨다운(초)
         self.cooldown_secs = 10
 
-        # 시리얼 연결(오프라인 모드 허용)
+        # --- 시리얼 연결(오프라인 허용) ---
         self.conn = self.try_open_serial()
         if self.conn:
-            self.recv = Receiver(self.conn)
+            self.recv = Receiver(self.conn, parent=self)
             self.recv.detected.connect(self.detected)
             self.recv.start()
             self.uidLabel.setText("카드 대주세요")
         else:
-            self.recv = None
             self.uidLabel.setText("오프라인 모드: 카드 대주세요 (RFID 미연결)")
 
-# 냉난방 시스템 =============================================
-        # RFID 포트는 self.conn으로 이미 열려 있음
+        # HVAC 포트(별도 포트 자동 탐색)
         self.hvac_conn = self.try_open_hvac_serial(exclude=self.conn.port if self.conn else None)
         if self.hvac_conn:
             print(f"[SERIAL] HVAC connected: {self.hvac_conn.port}")
         else:
             print("[SERIAL] HVAC not connected (off-line mode)")
-# 냉난방 시스템 ========================================================
-
 
         # DB/유저 로드
         self.init_db()
@@ -163,7 +257,7 @@ class MyDialog(QDialog, from_class):
         self.managementButton.clicked.connect(self.toggle_management_view)
 
         # 테이블 준비 & 초기 로드
-        self._updating_table = False  # 편집 이벤트 루프 방지 플래그
+        self._updating_table = False  # 편집 루프 방지
         self.setup_table()
         self.tableWidget.itemChanged.connect(self.on_item_changed)
 
@@ -182,65 +276,30 @@ class MyDialog(QDialog, from_class):
         QShortcut(QKeySequence("Delete"), self, activated=self.delete_selected_rows)
         QShortcut(QKeySequence("F5"), self, activated=self.reconnect_serial)
 
-# ======================== 냉난방 시스템 여기 추가함 ===============================
-        # === HVAC 제어 상태/단축키 ===
-        # self._hvac_enabled_cache = None  # 마지막으로 보낸 enable 값(변화 있을 때만 전송)
-        # self._auto_hvac = True          # 자동 전송 on/off (필요시 False로 바꾸면 수동만)
-
-        # 수동 단축키: Ctrl+1=HE 1, Ctrl+0=HE 0, Ctrl+R=HR
+        # HVAC 수동 단축키
         QShortcut(QKeySequence("Ctrl+1"), self, activated=lambda: self.send_he(True))
         QShortcut(QKeySequence("Ctrl+0"), self, activated=lambda: self.send_he(False))
-        # QShortcut(QKeySequence("Ctrl+R"), self, activated=self.send_hr)
 
+        # --- mtrcheckButton 클릭 시 BOOKED 예약 창 열기 ---
+        self._resv_viewer = None
+        btn = getattr(self, "mtrcheckButton", None)
+        if btn:
+            btn.clicked.connect(self.open_booked_reservations)
 
-        # (옵션) 주기 상태 폴링: 10초마다 HR
-        # self._hr_timer = QTimer(self)
-        # self._hr_timer.setInterval(10000)
-        # self._hr_timer.timeout.connect(self.send_hr)
-        # self._hr_timer.start()
-
-        # --------- HVAC 직렬 명령 ----------
-    # def _serial_send_line(self, text: str):
-    #     """줄 단위 전송(CRLF)"""
-    #     if not (self.conn and getattr(self.conn, "is_open", False)):
-    #         print("[SERIAL] not connected; skip:", text)
-    #         return
-    #     try:
-    #         self.conn.write((text + "\r\n").encode("utf-8"))
-    #         print("[TX]", text)
-    #     except Exception as e:
-    #         print("[SERIAL][ERROR] write:", e)
-
-    def _serial_send_line(self, text: str):
-        """HVAC 포트가 있으면 그쪽으로, 없으면 기존 RFID conn으로 보냄"""
-        ser = None
-        if hasattr(self, "hvac_conn") and self.hvac_conn and getattr(self.hvac_conn, "is_open", False):
-            ser = self.hvac_conn
-        elif self.conn and getattr(self.conn, "is_open", False):
-            ser = self.conn
-        else:
-            print("[SERIAL] not connected; skip:", text)
-            return
+    # ---------------- 시리얼 도우미 ----------------
+    def try_open_serial(self, port="/dev/ttyACM0", baudrate=9600):
         try:
-            ser.write((text + "\r\n").encode("utf-8"))
-            print(f"[TX] {text} -> {ser.port}")
+            s = serial.Serial(port=port, baudrate=baudrate, timeout=1)
+            print(f"[SERIAL] Connected to {s.port} @ {baudrate}")
+            return s
         except Exception as e:
-            print("[SERIAL][ERROR] write:", e)
-
-
-    def send_he(self, enable: bool):
-        self._serial_send_line(f"HE {'1' if enable else '0'}")
-        self._hvac_enabled_cache = enable  # 수동 보낸 경우 캐시 갱신
-
-    # def send_hr(self):
-    #     self._serial_send_line("HR")
+            print(f"[SERIAL] 포트 열기 실패: {e} -> 오프라인 모드로 계속 진행")
+            return None
 
     def try_open_hvac_serial(self, exclude=None, baudrate=9600):
         """RFID 포트(exclude)를 제외한 다른 ttyACM/ttyUSB를 찾아 HVAC용으로 연다."""
         try:
-            import serial.tools.list_ports as lp
             ports = [p.device for p in lp.comports()]
-            # 우선순위 간단: exclude 제외 + ttyACM/ttyUSB
             for dev in ports:
                 if exclude and dev == exclude:
                     continue
@@ -254,12 +313,31 @@ class MyDialog(QDialog, from_class):
         except Exception as e:
             print("[SERIAL][HVAC] scan failed:", e)
             return None
-        
+
+    def reconnect_serial(self):
+        """F5: 미연결 시 재연결 시도 (이미 실행 중이면 재시작하지 않음)"""
+        if self.conn and getattr(self.conn, "is_open", False):
+            QMessageBox.information(self, "시리얼", "이미 연결되어 있습니다.")
+            return
+        self.conn = self.try_open_serial()
+        if self.conn:
+            if self.recv is None:
+                self.recv = Receiver(self.conn, parent=self)
+                self.recv.detected.connect(self.detected)
+                self.recv.start()
+            else:
+                self.recv.conn = self.conn
+                if not self.recv.isRunning():
+                    self.recv.start()
+            self.uidLabel.setText("카드 대주세요 (연결됨)")
+            QMessageBox.information(self, "시리얼", "연결 성공")
+        else:
+            QMessageBox.warning(self, "시리얼", "연결 실패 (오프라인 모드 유지)")
+
     # -------- HVAC 직렬 명령 --------
     def _serial_send_line(self, text: str):
-        """HVAC 포트가 있으면 그쪽으로, 없으면 기존 RFID conn으로 보냄"""
         ser = None
-        if hasattr(self, "hvac_conn") and self.hvac_conn and getattr(self.hvac_conn, "is_open", False):
+        if self.hvac_conn and getattr(self.hvac_conn, "is_open", False):
             ser = self.hvac_conn
         elif self.conn and getattr(self.conn, "is_open", False):
             ser = self.conn
@@ -268,51 +346,19 @@ class MyDialog(QDialog, from_class):
             return
         try:
             ser.write((text + "\r\n").encode("utf-8"))
-            print("[TX]", text, "->", ser.port)
+            print(f"[TX] {text} -> {ser.port}")
         except Exception as e:
             print("[SERIAL][ERROR] write:", e)
 
     def send_he(self, enable: bool):
         self._serial_send_line(f"HE {'1' if enable else '0'}")
-        self._hvac_enabled_cache = enable  # 캐시 갱신(자동 제어에서 사용)
+        self._hvac_enabled_cache = enable
 
     def send_hr(self):
         self._serial_send_line("HR")
 
-
-
-# ============================================================
-
-
-
-    # ---------------- 시리얼 도우미 ----------------
-    def try_open_serial(self, port="/dev/ttyACM0", baudrate=9600):
-        try:
-            return serial.Serial(port=port, baudrate=baudrate, timeout=1)
-        except Exception as e:
-            print(f"[SERIAL] 포트 열기 실패: {e} -> 오프라인 모드로 계속 진행")
-            return None
-
-    def reconnect_serial(self):
-        """F5: 미연결 시 재연결 시도"""
-        if self.conn and getattr(self.conn, "is_open", False):
-            QMessageBox.information(self, "시리얼", "이미 연결되어 있습니다.")
-            return
-        self.conn = self.try_open_serial()
-        if self.conn:
-            if self.recv is None:
-                self.recv = Receiver(self.conn)
-                self.recv.detected.connect(self.detected)
-            self.recv.conn = self.conn
-            self.recv.start()
-            self.uidLabel.setText("카드 대주세요 (연결됨)")
-            QMessageBox.information(self, "시리얼", "연결 성공")
-        else:
-            QMessageBox.warning(self, "시리얼", "연결 실패 (오프라인 모드 유지)")
-
     # ---------------- 공통 유틸 ----------------
     def _td_to_hms(self, val) -> str:
-        """mysql TIME -> timedelta/time/str -> 'HH:MM:SS'"""
         if val is None:
             return ""
         try:
@@ -372,7 +418,6 @@ class MyDialog(QDialog, from_class):
             autocommit=True,
         )
         cur = self.db.cursor()
-        # 출퇴근 로그 테이블
         cur.execute("""
             CREATE TABLE IF NOT EXISTS access_log (
                 id BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -384,7 +429,6 @@ class MyDialog(QDialog, from_class):
                 INDEX idx_uid_date (uid, ts)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
         """)
-        # 사용자 마스터
         cur.execute("""
             CREATE TABLE IF NOT EXISTS users (
                 uid VARCHAR(16) PRIMARY KEY,
@@ -400,7 +444,6 @@ class MyDialog(QDialog, from_class):
     def load_users(self):
         self.users = {}
         self.users_csv_path = os.path.join(os.path.dirname(__file__), "users.csv")
-
         try:
             cur = self.db.cursor()
             cur.execute("SELECT uid, name, company FROM users")
@@ -435,7 +478,6 @@ class MyDialog(QDialog, from_class):
 
     # ---------------- 출퇴근 기록 ----------------
     def _is_duplicate_action(self, uid: str, action: str, now_ts: datetime) -> bool:
-        """같은 계열(IN/FIRST_IN, OUT/LAST_OUT) 연속 태깅 쿨다운"""
         cur = self.db.cursor()
         cur.execute("SELECT ts, action FROM access_log WHERE uid=%s ORDER BY id DESC LIMIT 1", (uid,))
         row = cur.fetchone()
@@ -467,13 +509,9 @@ class MyDialog(QDialog, from_class):
         return "OUT" if last == "IN" else "IN"
 
     def _normalize_day_flags(self, date_str: str):
-        """해당 날짜: FIRST_IN, LAST_OUT 각각 1건만 유지되도록 정규화"""
         cur = self.db.cursor()
-        # 초기화
         cur.execute("UPDATE access_log SET action='IN'  WHERE DATE(ts)=%s AND action='FIRST_IN'", (date_str,))
         cur.execute("UPDATE access_log SET action='OUT' WHERE DATE(ts)=%s AND action='LAST_OUT'", (date_str,))
-
-        # 가장 이른 IN 1건 → FIRST_IN
         cur.execute(
             """
             SELECT id FROM access_log
@@ -486,8 +524,6 @@ class MyDialog(QDialog, from_class):
         row = cur.fetchone()
         if row:
             cur.execute("UPDATE access_log SET action='FIRST_IN' WHERE id=%s", (row[0],))
-
-        # 가장 늦은 OUT 1건 → LAST_OUT
         cur.execute(
             """
             SELECT id FROM access_log
@@ -508,15 +544,12 @@ class MyDialog(QDialog, from_class):
         now_ts = datetime.now(ZoneInfo("Asia/Seoul")).replace(tzinfo=None)
         today = now_ts.date().isoformat()
 
-        # 중복 방지
         if self._is_duplicate_action(uid_hex, action, now_ts):
             print(f"[SKIP] duplicate {action} for {uid_hex}")
             return
 
-        # --- 현재 인원(이벤트 전) 계산
         present_before = self._present_count(today)
 
-        # 1) 기본은 그대로 INSERT (일단 IN/OUT로 넣고, 나중에 플래그 업데이트)
         cur = self.db.cursor()
         cur.execute(
             "INSERT INTO access_log (uid, name, company, ts, action) VALUES (%s, %s, %s, %s, %s)",
@@ -525,51 +558,33 @@ class MyDialog(QDialog, from_class):
         inserted_id = cur.lastrowid
         cur.close()
 
-        # 2) 플래그 결정(이벤트 드리븐)
-        #   - IN 직전 인원이 0이었다면 -> 오늘의 첫 출근이므로 이번 이벤트를 FIRST_IN으로 지정
-        #   - OUT 직후 인원이 0이라면 -> 오늘의 마지막 퇴근이므로 이번 이벤트를 LAST_OUT으로 지정
-        #   - 그 외에는 모두 평범한 IN/OUT 유지
         if action in ("IN", "FIRST_IN"):
             if present_before == 0:
-                # 오늘의 첫 출근 확정: 이번 이벤트를 FIRST_IN으로 바꿈
                 cur = self.db.cursor()
-                # 혹시 기존 FIRST_IN이 찍혀있으면 IN으로 되돌림(수정/삭제로 꼬인 날 대비)
                 cur.execute(
                     "UPDATE access_log SET action='IN' WHERE DATE(ts)=%s AND action='FIRST_IN'",
                     (today,)
                 )
                 cur.execute("UPDATE access_log SET action='FIRST_IN' WHERE id=%s", (inserted_id,))
                 cur.close()
-            else:
-                # 첫 출근이 아님 → 그냥 IN 유지
-                pass
-
-            # 누군가 출근했다면 그 날에 남아있는 LAST_OUT은 무효. (근무가 재개된 상태이므로)
             self._clear_last_out_flag_for_day(today)
-
-        else:  # OUT or LAST_OUT(추론상 OUT일 것)
-            # 삽입 후 인원 계산(= present_after)
+        else:
             present_after = self._present_count(today)
-
             if present_after == 0:
-                # 오늘 마지막 퇴근 확정: 기존 LAST_OUT 지우고 이번 이벤트를 LAST_OUT으로
                 self._clear_last_out_flag_for_day(today)
                 cur = self.db.cursor()
                 cur.execute("UPDATE access_log SET action='LAST_OUT' WHERE id=%s", (inserted_id,))
                 cur.close()
             else:
-                # 아직 사람이 남아있음 → 이번 것은 OUT 유지, 그리고 혹시 남아있는 LAST_OUT이 있었다면 OUT으로 되돌려서 '가짜 마지막' 방지
                 self._clear_last_out_flag_for_day(today)
 
         print(f"[ATTEND] {now_ts} {uid_hex} {name} {company} -> {action}")
         self.uidLabel.setText(f"{uid_hex}")
         self.refresh_all_views()
 
-        # 냉난방 시스템 추가 부분 =====================
+        # 인원수 기반 HVAC 자동 제어
         pc = self._present_count(today)
         self._maybe_send_hvac_by_occupancy(pc)
-        # ==========================================
-
 
     # ---------------- 신규 사용자 등록 ----------------
     def register_user(self):
@@ -669,9 +684,6 @@ class MyDialog(QDialog, from_class):
         tw.setSortingEnabled(True)
 
     def fetch_daily_spans(self):
-        """
-        (uid, 날짜)별 첫 IN/마지막 OUT 집계 + 해당 날짜의 전사 FIRST_IN/ LAST_OUT 주인 여부
-        """
         cur = self.db.cursor()
         cur.execute(
             """
@@ -731,12 +743,9 @@ class MyDialog(QDialog, from_class):
             for c, val in enumerate(values):
                 it = QTableWidgetItem(val)
                 it.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-                # 메타 저장: uid, 날짜, 원래값(표시 텍스트)
                 it.setData(Qt.ItemDataRole.UserRole, uid or "")
                 it.setData(Qt.ItemDataRole.UserRole + 1, str(d) if d else "")
                 it.setData(Qt.ItemDataRole.UserRole + 2, val)
-
-                # UID(0)만 편집 불가
                 if c == 0:
                     it.setFlags(it.flags() & ~Qt.ItemFlag.ItemIsEditable)
                 else:
@@ -756,27 +765,26 @@ class MyDialog(QDialog, from_class):
         new_text = (item.text() or "").strip()
 
         uid = item.data(Qt.ItemDataRole.UserRole) or ""
-        old_date = item.data(Qt.ItemDataRole.UserRole + 1) or ""  # 이 행의 원래 날짜
+        old_date = item.data(Qt.ItemDataRole.UserRole + 1) or ""
         old_val = item.data(Qt.ItemDataRole.UserRole + 2) or ""
 
         if col == 0:
-            return  # UID는 편집 불가
+            return
 
         try:
-            if col == 1:  # 이름
+            if col == 1:
                 self._update_user_name(uid, new_text)
-            elif col == 2:  # 회사
+            elif col == 2:
                 self._update_user_company(uid, new_text)
-            elif col == 3:  # 날짜
+            elif col == 3:
                 if not self._is_valid_date(new_text):
                     raise ValueError("날짜는 YYYY-MM-DD 형식이어야 합니다.")
                 self._update_date_for_boundaries(uid, old_date, new_text)
-                self._normalize_day_flags(new_text)      # 정규화
+                self._normalize_day_flags(new_text)
                 if old_date:
-                    self._normalize_day_flags(old_date)  # 원래 날짜도 정규화
+                    self._normalize_day_flags(old_date)
                 item.setData(Qt.ItemDataRole.UserRole + 1, new_text)
-
-            elif col == 4:  # 출근시간 (첫 IN)
+            elif col == 4:
                 date_text = self.tableWidget.item(row, 3).text().strip()
                 if not self._is_valid_date(date_text):
                     raise ValueError("날짜 셀 값이 유효하지 않습니다(YYYY-MM-DD).")
@@ -788,8 +796,7 @@ class MyDialog(QDialog, from_class):
                         raise ValueError("시간은 HH:MM 또는 HH:MM:SS 형식이어야 합니다.")
                     self._update_first_in_time(uid, date_text, t)
                 self._normalize_day_flags(date_text)
-
-            elif col == 5:  # 퇴근시간 (마지막 OUT)
+            elif col == 5:
                 date_text = self.tableWidget.item(row, 3).text().strip()
                 if not self._is_valid_date(date_text):
                     raise ValueError("날짜 셀 값이 유효하지 않습니다(YYYY-MM-DD).")
@@ -801,7 +808,6 @@ class MyDialog(QDialog, from_class):
                         raise ValueError("시간은 HH:MM 또는 HH:MM:SS 형식이어야 합니다.")
                     self._update_last_out_time(uid, date_text, t)
                 self._normalize_day_flags(date_text)
-
             else:
                 return
 
@@ -814,7 +820,7 @@ class MyDialog(QDialog, from_class):
 
         self.refresh_all_views()
 
-    # ======== 행 삭제(선택 행의 UID/날짜 전체 삭제) ========
+    # ======== 행 삭제 ========
     def delete_selected_rows(self):
         tw = self.tableWidget
         sel_rows = sorted(set(idx.row() for idx in tw.selectedIndexes()))
@@ -855,7 +861,6 @@ class MyDialog(QDialog, from_class):
             touched_days.add(d)
         cur.close()
 
-        # 삭제 후 날짜별 정규화
         for d in touched_days:
             self._normalize_day_flags(d)
 
@@ -955,12 +960,10 @@ class MyDialog(QDialog, from_class):
             return
         min_in = self._get_boundary_event(uid, old_date, action='IN', earliest=True)
         max_out = self._get_boundary_event(uid, old_date, action='OUT', earliest=False)
-
         if min_in:
             eid, ts = min_in
             new_dt = self._combine_date_time(new_date, ts.strftime("%H:%M:%S"))
             self._update_event_dt(eid, new_dt)
-
         if max_out:
             eid, ts = max_out
             new_dt = self._combine_date_time(new_date, ts.strftime("%H:%M:%S"))
@@ -1007,14 +1010,9 @@ class MyDialog(QDialog, from_class):
         tw2.setHorizontalHeaderLabels(["UID", "이름", "회사", "날짜", "출근시간"])
         tw2.horizontalHeader().setStretchLastSection(True)
         tw2.verticalHeader().setVisible(False)
-        try:
-            tw2.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-            tw2.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-            tw2.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
-        except AttributeError:
-            tw2.setEditTriggers(QAbstractItemView.NoEditTriggers)
-            tw2.setSelectionBehavior(QAbstractItemView.SelectRows)
-            tw2.setSelectionMode(QAbstractItemView.SingleSelection)
+        tw2.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        tw2.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        tw2.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         tw2.setAlternatingRowColors(True)
         tw2.setSortingEnabled(True)
 
@@ -1049,24 +1047,19 @@ class MyDialog(QDialog, from_class):
         except Exception:
             pass
 
-# 냉난방 시스템 추가 부분 ============================
-        self._maybe_send_hvac_by_occupancy(n)  # 인원 변화에 따라 HE 자동 전송
+        # 인원 변화에 따라 HE 자동 전송
+        self._maybe_send_hvac_by_occupancy(n)
 
     def _maybe_send_hvac_by_occupancy(self, present_count: int):
-        """
-        present_count > 0이면 HE 1, ==0이면 HE 0.
-        마지막으로 보낸 값과 달라질 때만 전송.
-        """
+        """present_count > 0이면 HE 1, ==0이면 HE 0. 마지막 전송과 다를 때만 전송."""
         if not self._auto_hvac:
             return
         want_enable = (present_count > 0)
         if self._hvac_enabled_cache is None or self._hvac_enabled_cache != want_enable:
-            self.send_he(want_enable)  # 내부에서 캐시 갱신됨
+            self.send_he(want_enable)
             print(f"[HVAC] auto {'ENABLE' if want_enable else 'DISABLE'} (present={present_count})")
-# =======================================
 
     def fetch_today_attendees(self):
-        """오늘 최초 IN(FIRST_IN 포함) 시간"""
         today = self._today_kst()
         cur = self.db.cursor()
         cur.execute(
@@ -1088,11 +1081,8 @@ class MyDialog(QDialog, from_class):
         rows = cur.fetchall()
         cur.close()
         return rows
-    
+
     def _present_count(self, date_str: str) -> int:
-        """
-        date_str(YYYY-MM-DD) 기준, uid별 '마지막 이벤트'가 IN/FIRST_IN인 사람 수를 리턴
-        """
         cur = self.db.cursor()
         cur.execute(
             """
@@ -1114,7 +1104,7 @@ class MyDialog(QDialog, from_class):
         row = cur.fetchone()
         cur.close()
         return int(row[0] if row else 0)
-    
+
     def _clear_last_out_flag_for_day(self, date_str: str):
         cur = self.db.cursor()
         cur.execute(
@@ -1124,8 +1114,21 @@ class MyDialog(QDialog, from_class):
         cur.close()
 
     def refresh_present_table(self):
-        rows = self.fetch_today_attendees()
+        # label_2의 현재 텍스트 확인
+        try:
+            label_text = self.label_2.text()
+            n = int("".join([ch for ch in label_text if ch.isdigit()]))
+        except Exception:
+            n = 0
+
         tw2 = self.tableWidget_2
+        if n == 0:
+            # 인원이 0이면 테이블 비우기
+            tw2.setRowCount(0)
+            return
+
+        # 인원이 있을 때만 오늘 출근자 조회
+        rows = self.fetch_today_attendees()
         tw2.setRowCount(len(rows))
         for r, (uid, name, company, d, first_in) in enumerate(rows):
             vals = [uid or "", name or "", company or "", str(d) if d else "", self._td_to_hms(first_in)]
@@ -1140,12 +1143,31 @@ class MyDialog(QDialog, from_class):
         self.refresh_present_table()
         self.refresh_headcount()
 
+    # ---------------- BOOKED 예약 창 열기 ----------------
+    def open_booked_reservations(self):
+        if not hasattr(self, "_resv_viewer") or self._resv_viewer is None:
+            self._resv_viewer = ReservationViewer(self.db, parent=self)
+        try:
+            self._resv_viewer.reload()
+            self._resv_viewer.show()
+            self._resv_viewer.raise_()
+            self._resv_viewer.activateWindow()
+        except RuntimeError:
+            self._resv_viewer = ReservationViewer(self.db, parent=self)
+            self._resv_viewer.show()
+
     # ---------------- 종료 정리 ----------------
     def closeEvent(self, event):
         try:
             if self.recv is not None:
                 self.recv.stop()
-                self.recv.wait(1000)
+                self.recv.wait(1500)
+        except Exception:
+            pass
+        try:
+            if self.hvac_recv is not None:
+                self.hvac_recv.stop()
+                self.hvac_recv.wait(1000)
         except Exception:
             pass
         try:
@@ -1154,11 +1176,16 @@ class MyDialog(QDialog, from_class):
         except Exception:
             pass
         try:
-            if hasattr(self, "db") and self.db.is_connected():
-                self.db.close()
-
+            if self.hvac_conn and getattr(self.hvac_conn, "is_open", False):
+                self.hvac_conn.close()
         except Exception:
             pass
+        try:
+            if hasattr(self, "db") and self.db.is_connected():
+                self.db.close()
+        except Exception:
+            pass
+
         event.accept()
 
     # ---------------- 관리 버튼 ----------------

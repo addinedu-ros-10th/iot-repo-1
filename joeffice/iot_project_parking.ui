@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>574</width>
-    <height>520</height>
+    <width>1027</width>
+    <height>880</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -19,7 +19,7 @@
      <x>40</x>
      <y>30</y>
      <width>341</width>
-     <height>411</height>
+     <height>421</height>
     </rect>
    </property>
   </widget>
@@ -40,7 +40,7 @@
    <property name="geometry">
     <rect>
      <x>400</x>
-     <y>80</y>
+     <y>70</y>
      <width>88</width>
      <height>26</height>
     </rect>
@@ -53,26 +53,85 @@
    <property name="geometry">
     <rect>
      <x>400</x>
-     <y>130</y>
+     <y>110</y>
      <width>88</width>
      <height>26</height>
     </rect>
    </property>
    <property name="text">
-    <string>화면종료</string>
+    <string>화면</string>
    </property>
   </widget>
   <widget class="QPushButton" name="newregisterButton">
    <property name="geometry">
     <rect>
      <x>400</x>
-     <y>180</y>
+     <y>150</y>
      <width>88</width>
      <height>26</height>
     </rect>
    </property>
    <property name="text">
     <string>신규등록</string>
+   </property>
+  </widget>
+  <widget class="QLabel" name="videoLabel">
+   <property name="geometry">
+    <rect>
+     <x>620</x>
+     <y>30</y>
+     <width>201</width>
+     <height>121</height>
+    </rect>
+   </property>
+   <property name="text">
+    <string/>
+   </property>
+  </widget>
+  <widget class="QLabel" name="label_2">
+   <property name="geometry">
+    <rect>
+     <x>410</x>
+     <y>270</y>
+     <width>191</width>
+     <height>18</height>
+    </rect>
+   </property>
+   <property name="text">
+    <string>실시간 주차정보 :</string>
+   </property>
+  </widget>
+  <widget class="QTableWidget" name="tableWidget">
+   <property name="geometry">
+    <rect>
+     <x>410</x>
+     <y>310</y>
+     <width>481</width>
+     <height>141</height>
+    </rect>
+   </property>
+  </widget>
+  <widget class="QPushButton" name="manageButton">
+   <property name="geometry">
+    <rect>
+     <x>40</x>
+     <y>470</y>
+     <width>131</width>
+     <height>26</height>
+    </rect>
+   </property>
+   <property name="text">
+    <string>주차관리대장</string>
+   </property>
+  </widget>
+  <widget class="QTableWidget" name="tableWidget_2">
+   <property name="geometry">
+    <rect>
+     <x>40</x>
+     <y>520</y>
+     <width>841</width>
+     <height>301</height>
+    </rect>
    </property>
   </widget>
  </widget>

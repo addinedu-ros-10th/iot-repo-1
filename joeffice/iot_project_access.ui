@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>645</width>
-    <height>840</height>
+    <width>703</width>
+    <height>892</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -16,7 +16,7 @@
   <widget class="QGroupBox" name="groupBox">
    <property name="geometry">
     <rect>
-     <x>20</x>
+     <x>30</x>
      <y>30</y>
      <width>601</width>
      <height>71</height>
@@ -74,7 +74,7 @@
   <widget class="QTableWidget" name="tableWidget">
    <property name="geometry">
     <rect>
-     <x>20</x>
+     <x>30</x>
      <y>200</y>
      <width>601</width>
      <height>351</height>
@@ -114,7 +114,7 @@
   <widget class="QPushButton" name="managementButton">
    <property name="geometry">
     <rect>
-     <x>20</x>
+     <x>30</x>
      <y>130</y>
      <width>111</width>
      <height>41</height>
@@ -127,9 +127,9 @@
   <widget class="QTableWidget" name="tableWidget_2">
    <property name="geometry">
     <rect>
-     <x>60</x>
-     <y>610</y>
-     <width>511</width>
+     <x>30</x>
+     <y>620</y>
+     <width>601</width>
      <height>192</height>
     </rect>
    </property>
@@ -162,14 +162,27 @@
   <widget class="QLabel" name="label_2">
    <property name="geometry">
     <rect>
-     <x>60</x>
-     <y>580</y>
+     <x>30</x>
+     <y>590</y>
      <width>191</width>
      <height>18</height>
     </rect>
    </property>
    <property name="text">
     <string>실시간 근무인원 :</string>
+   </property>
+  </widget>
+  <widget class="QPushButton" name="mtrcheckButton">
+   <property name="geometry">
+    <rect>
+     <x>160</x>
+     <y>130</y>
+     <width>121</width>
+     <height>41</height>
+    </rect>
+   </property>
+   <property name="text">
+    <string>회의실 예약현황</string>
    </property>
   </widget>
  </widget>

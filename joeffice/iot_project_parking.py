@@ -9,13 +9,14 @@ from ultralytics import YOLO
 
 import serial
 import serial.tools.list_ports
+import numpy as np
 
 from PyQt6 import uic
-from PyQt6.QtCore import QThread, pyqtSignal, Qt
+from PyQt6.QtCore import QThread, pyqtSignal, Qt, QTimer
 from PyQt6.QtGui import QImage, QPixmap
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QDialog,
-    QListWidget, QListWidgetItem,
+    QListWidget, QListWidgetItem, QTableWidget, QTableWidgetItem,
     QVBoxLayout, QHBoxLayout,
     QMessageBox, QPushButton, QLineEdit, QComboBox, QLabel
 )
@@ -42,9 +43,43 @@ def ensure_parking_table():
             company VARCHAR(100) NOT NULL,
             number VARCHAR(20) NOT NULL,
             class VARCHAR(50) NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            INDEX(number)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     """)
+    cur.close(); conn.close()
+
+# ---- parking 스키마 보강: 컬럼/인덱스 없으면 추가 ----
+def column_exists(cur, table, col):
+    cur.execute("""
+        SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+         WHERE TABLE_SCHEMA=%s AND TABLE_NAME=%s AND COLUMN_NAME=%s
+         LIMIT 1
+    """, (DB["database"], table, col))
+    return cur.fetchone() is not None
+
+def index_exists(cur, table, index_name):
+    cur.execute("""
+        SELECT 1 FROM INFORMATION_SCHEMA.STATISTICS
+         WHERE TABLE_SCHEMA=%s AND TABLE_NAME=%s AND INDEX_NAME=%s
+         LIMIT 1
+    """, (DB["database"], table, index_name))
+    return cur.fetchone() is not None
+
+def ensure_parking_schema():
+    conn = connect_db(); cur = conn.cursor()
+    if not column_exists(cur, "parking", "last_in_time"):
+        cur.execute("ALTER TABLE parking ADD COLUMN last_in_time DATETIME NULL")
+    if not column_exists(cur, "parking", "last_out_time"):
+        cur.execute("ALTER TABLE parking ADD COLUMN last_out_time DATETIME NULL")
+    if not column_exists(cur, "parking", "is_parked"):
+        cur.execute("ALTER TABLE parking ADD COLUMN is_parked TINYINT(1) NOT NULL DEFAULT 0")
+    if not index_exists(cur, "parking", "idx_is_parked"):
+        cur.execute("ALTER TABLE parking ADD INDEX idx_is_parked (is_parked)")
+    if not index_exists(cur, "parking", "idx_last_in_time"):
+        cur.execute("ALTER TABLE parking ADD INDEX idx_last_in_time (last_in_time)")
+    if not index_exists(cur, "parking", "idx_last_out_time"):
+        cur.execute("ALTER TABLE parking ADD INDEX idx_last_out_time (last_out_time)")
     cur.close(); conn.close()
 
 def insert_parking_row(name: str, company: str, number: str, klass: str):
@@ -55,8 +90,93 @@ def insert_parking_row(name: str, company: str, number: str, klass: str):
     )
     cur.close(); conn.close()
 
+# ---- 상태 유틸 (visit 테이블 없이 운영) ----
+def is_currently_parked(number: str) -> bool:
+    conn = connect_db(); cur = conn.cursor()
+    cur.execute("SELECT is_parked FROM parking WHERE number=%s LIMIT 1", (number,))
+    row = cur.fetchone()
+    cur.close(); conn.close()
+    return bool(row and int(row[0]) == 1)
+
+def mark_in(number: str):
+    conn = connect_db(); cur = conn.cursor()
+    cur.execute("""
+        UPDATE parking
+           SET last_in_time = NOW(),
+               is_parked    = 1
+         WHERE number=%s
+         LIMIT 1
+    """, (number,))
+    cur.close(); conn.close()
+
+def mark_out(number: str):
+    conn = connect_db(); cur = conn.cursor()
+    cur.execute("""
+        UPDATE parking
+           SET last_out_time = NOW(),
+               is_parked     = 0
+         WHERE number=%s
+         LIMIT 1
+    """, (number,))
+    cur.close(); conn.close()
+
+def get_current_count() -> int:
+    conn = connect_db(); cur = conn.cursor()
+    cur.execute("SELECT COUNT(*) FROM parking WHERE is_parked=1")
+    cnt = cur.fetchone()[0]
+    cur.close(); conn.close()
+    return int(cnt)
+
+def fetch_current_parked_rows():
+    """현재 주차 중인 차량 목록 (name, company, number, class, last_in_time, last_out_time)"""
+    conn = connect_db(); cur = conn.cursor()
+    cur.execute("""
+        SELECT name, company, number, class,
+               COALESCE(DATE_FORMAT(last_in_time,  '%Y-%m-%d %H:%i:%s'), ''),
+               COALESCE(DATE_FORMAT(last_out_time, '%Y-%m-%d %H:%i:%s'), '')
+          FROM parking
+         WHERE is_parked=1
+         ORDER BY last_in_time DESC
+    """)
+    rows = cur.fetchall()
+    cur.close(); conn.close()
+    return rows
+
+def fetch_parking_manage_rows():
+    conn = connect_db(); cur = conn.cursor(dictionary=True)
+    cur.execute("""
+        SELECT
+            name, company, number, class, is_parked,
+            last_in_time, last_out_time,
+            CASE
+              WHEN is_parked=1 AND last_in_time IS NOT NULL
+                THEN TIMESTAMPDIFF(MINUTE, last_in_time, NOW())
+              WHEN is_parked=0 AND last_in_time IS NOT NULL AND last_out_time IS NOT NULL
+                THEN TIMESTAMPDIFF(MINUTE, last_in_time, last_out_time)
+              ELSE NULL
+            END AS minutes_used
+        FROM parking
+        ORDER BY COALESCE(last_in_time, created_at) DESC, id DESC
+    """)
+    rows = cur.fetchall()
+    cur.close(); conn.close()
+    return rows
+
+def format_minutes_hms(total_minutes: int | None) -> str:
+    if total_minutes is None:
+        return ""
+    if total_minutes < 0:
+        total_minutes = 0
+    days = total_minutes // 1440
+    rem  = total_minutes % 1440
+    hours = rem // 60
+    mins  = rem % 60
+    if days > 0:
+        return f"{days}일 {hours}시간 {mins}분"
+    return f"{hours}시간 {mins}분"
+
 # ================== 아두이노 직렬 설정 ==================
-ARDUINO_BAUD = 115200   # ← 아두이노 스케치 Serial.begin(115200)과 반드시 동일
+ARDUINO_BAUD = 9600
 SERIAL_TIMEOUT = 1.0
 
 class ArduinoController:
@@ -82,7 +202,7 @@ class ArduinoController:
                     port = cand
             self.ser = serial.Serial(port, self.baud, timeout=SERIAL_TIMEOUT)
             self.port_name = port
-            time.sleep(1.8)  # 보드 리셋 대기
+            time.sleep(1.8)
             print(f"[SERIAL] Connected to {port} @ {self.baud}")
         except Exception as e:
             self.ser = None
@@ -124,7 +244,6 @@ CONF_THRES = 0.25
 IOU_THRES = 0.5
 IMGSZ = 640
 
-# ---- Tesseract 경로/언어 준비 ----
 TESSERACT_BIN = "/usr/bin/tesseract"
 if os.path.exists(TESSERACT_BIN):
     pytesseract.pytesseract.tesseract_cmd = TESSERACT_BIN
@@ -145,9 +264,8 @@ TESS_LANG = resolve_tess_lang()
 print(f"[INFO] OCR language set to: {TESS_LANG}")
 
 WHITELIST = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ가나다라마바사아자차카타파하허호무부거너더러머버서어저고노도로모보소오조우배국합육공하허호음임"
-PLATE_PATTERN = re.compile(r"\b\d{2,3}[가-힣]\d{4}\b")  # 예: 12가3456, 123가4567
-DEDUP_SECONDS = 6
-DETECT_LIMIT = 10
+PLATE_PATTERN = re.compile(r"\b\d{2,3}[가-힣]\d{4}\b")
+DEDUP_SECONDS = 6  # 같은 번호 연속 중복 방지 시간(초)
 
 # ================== OCR 유틸 ==================
 def preprocess_for_ocr(crop_bgr):
@@ -181,24 +299,30 @@ def ocr_plate(crop_bgr)->str:
     valid = validate_plate(clean)
     return valid or ""
 
-# ================== Detector Thread (미리보기 포함) ==================
+# ================== Detector Thread (라벨 미리보기 + 무한 감지) ==================
 class DetectorThread(QThread):
-    plateDetected = pyqtSignal(str)     # plate 텍스트
-    frameReady    = pyqtSignal(QImage)  # 미리보기 프레임
+    plateDetected = pyqtSignal(str)
+    frameReady    = pyqtSignal(QImage)
     done          = pyqtSignal()
 
-    def __init__(self, limit=DETECT_LIMIT, parent=None):
+    def __init__(self, parent=None):
         super().__init__(parent)
         self._running = True
-        self.limit = limit
-        self.last_seen = {}
-        self.collected = set()
-        self._last_emit_ts = 0.0  # 프리뷰 스로틀용
+        self.last_seen = {}   # plate -> last timestamp
+        self._last_emit_ts = 0.0
 
     def stop(self):
+        # 안전 종료: 루프 플래그 + 인터럽트 + 조인
         self._running = False
+        self.requestInterruption()
+        try:
+            self.wait(1500)
+        except Exception:
+            pass
 
     def run(self):
+        if self.isInterruptionRequested():
+            return
         if not os.path.exists(WEIGHTS_PATH):
             self.plateDetected.emit(f"[ERR] weights not found: {WEIGHTS_PATH}")
             self.done.emit(); return
@@ -214,14 +338,12 @@ class DetectorThread(QThread):
             self.done.emit(); return
 
         try:
-            while self._running:
-                if len(self.collected) >= self.limit: break
-
+            while self._running and not self.isInterruptionRequested():
                 ok, frame = cap.read()
                 if not ok:
-                    self.plateDetected.emit("[WARN] Frame grab failed."); break
+                    break
 
-                # ---------- 미리보기 (~15fps) ----------
+                # ---- 미리보기 (≈15fps) ----
                 now = time.time()
                 if now - self._last_emit_ts >= (1/15):
                     rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -230,13 +352,13 @@ class DetectorThread(QThread):
                     self.frameReady.emit(qimg.copy())
                     self._last_emit_ts = now
 
-                # ---------- 탐지 & OCR ----------
+                # ---- 탐지 & OCR ----
                 results = model.predict(source=frame, conf=CONF_THRES, iou=IOU_THRES, imgsz=IMGSZ, verbose=False)
-                now2 = time.time()
+                t2 = time.time()
                 for r in results:
                     if r.boxes is None: continue
                     for b in r.boxes:
-                        if not self._running or len(self.collected) >= self.limit: break
+                        if not self._running or self.isInterruptionRequested(): break
                         x1, y1, x2, y2 = b.xyxy[0].cpu().numpy().astype(int).tolist()
                         pad = int(0.06 * max(1, x2 - x1))
                         xx1 = max(0, x1 - pad); yy1 = max(0, y1 - pad)
@@ -245,14 +367,10 @@ class DetectorThread(QThread):
 
                         plate = ocr_plate(crop)
                         if not plate: continue
-                        last_t = self.last_seen.get(plate, 0)
-                        if now2 - last_t < DEDUP_SECONDS: continue
-                        self.last_seen[plate] = now2
-                        if plate in self.collected: continue
-
-                        self.collected.add(plate)
+                        if t2 - self.last_seen.get(plate, 0) < DEDUP_SECONDS:
+                            continue
+                        self.last_seen[plate] = t2
                         self.plateDetected.emit(plate)
-                        if len(self.collected) >= self.limit: break
         finally:
             cap.release()
         self.done.emit()
@@ -349,158 +467,291 @@ class MainWindow(BaseClass, UiClass):
         super().__init__()
         self.setupUi(self)
 
-        # 미리보기 on/off 상태
+        # 상태
         self.preview_enabled = True
+        self.min_auto_open_gap = 3.0
+        self._last_auto_open_ts_by_plate = {}
+        self.last_detected_plate = None
 
-        # 컨테이너/레이아웃
-        container = self.centralWidget() if hasattr(self,"centralWidget") and self.centralWidget() else self
-        layout = container.layout()
-        if layout is None:
-            layout = QVBoxLayout(container); container.setLayout(layout)
+        # 영상 라벨
+        self.videoLabel = self.findChild(QLabel, "videoLabel")
+        if self.videoLabel is None:
+            raise RuntimeError("ui에 QLabel 'videoLabel'이 없습니다.")
+        self.videoLabel.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.videoLabel.setMinimumHeight(260)
+        self.videoLabel.setStyleSheet("background:#111; color:#ccc;")
 
-        # QListWidget 확보
+        # 실시간 주차대수 라벨(label_2)
+        self.parkingCountLabel = self.findChild(QLabel, "label_2")
+        if self.parkingCountLabel is None:
+            raise RuntimeError("ui에 QLabel 'label_2'이 없습니다.")
+        self.parkingCountLabel.setText("실시간 주차정보: 0대")
+
+        # 현재 주차 목록 tableWidget
+        self.tableWidget = self.findChild(QTableWidget, "tableWidget")
+        if self.tableWidget is None:
+            raise RuntimeError("ui에 QTableWidget 'tableWidget'이 없습니다.")
+        headers = ["name", "company", "number", "class", "last_in_time", "last_out_time"]
+        self.tableWidget.setColumnCount(len(headers))
+        self.tableWidget.setHorizontalHeaderLabels(headers)
+        self.tableWidget.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.tableWidget.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.tableWidget.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
+        self.tableWidget.horizontalHeader().setStretchLastSection(True)
+
+        # 로그 리스트
         self.listPlates = self.findChild(QListWidget, "listPlates")
         if self.listPlates is None:
-            self.listPlates = QListWidget(self)
-            self.listPlates.setObjectName("listPlates")
+            container = self.centralWidget() if hasattr(self,"centralWidget") and self.centralWidget() else self
+            layout = container.layout()
+            if layout is None:
+                layout = QVBoxLayout(container); container.setLayout(layout)
+            self.listPlates = QListWidget(self); self.listPlates.setObjectName("listPlates")
             layout.addWidget(self.listPlates)
 
-        # ✅ 영상 전용 아이템(0번 셀) 구성
-        self._init_video_item(height=260)
-
-        # 등록 버튼 (인식된 번호 등록)
+        # 버튼
         self.registerButton = self.findChild(QPushButton, "registerButton")
-        if self.registerButton is None:
-            self.registerButton = QPushButton("등록", self)
-            self.registerButton.setObjectName("registerButton")
-            layout.addWidget(self.registerButton)
-        self.registerButton.clicked.connect(self.on_register_clicked)
+        if self.registerButton:
+            self.registerButton.clicked.connect(self.on_register_clicked)
 
-        # 🔘 offButton (있으면 연결만)
         self.offButton = self.findChild(QPushButton, "offButton")
         if self.offButton:
             self.offButton.clicked.connect(self.on_off_clicked)
 
-        # 🔓 openButton (DB 등록된 번호 선택시에만 활성화)
         self.openButton = self.findChild(QPushButton, "openButton")
         if self.openButton:
             self.openButton.setEnabled(False)
             self.openButton.clicked.connect(self.on_open_clicked)
-            # 리스트에서 선택이 바뀔 때마다 DB 검사
             self.listPlates.currentTextChanged.connect(self.on_plate_selection_changed)
 
-        # 🆕 newregisterButton (번호 직접 등록)
         self.newregisterButton = self.findChild(QPushButton, "newregisterButton")
         if self.newregisterButton:
             self.newregisterButton.clicked.connect(self.on_newregister_clicked)
 
+        # 관리(토글) 버튼과 관리 테이블
+        self.manageButton = self.findChild(QPushButton, "manageButton")
+        self.tableWidget2 = self.findChild(QTableWidget, "tableWidget_2")
+        if self.manageButton is None or self.tableWidget2 is None:
+            raise RuntimeError("ui에 manageButton 또는 tableWidget_2가 없습니다.")
+        self.manageButton.clicked.connect(self.on_manage_clicked)
+        headers2 = ["name", "company", "number", "class",
+                    "상태", "마지막 입차", "마지막 출차",
+                    "이번 주차시간", "이번 주차일수"]
+        self.tableWidget2.setColumnCount(len(headers2))
+        self.tableWidget2.setHorizontalHeaderLabels(headers2)
+        self.tableWidget2.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.tableWidget2.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.tableWidget2.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
+        self.tableWidget2.horizontalHeader().setStretchLastSection(True)
+        self.tableWidget2.setVisible(False)   # 기본 숨김
+
         # DB 준비
         try:
             ensure_parking_table()
+            ensure_parking_schema()
         except Exception as e:
             QMessageBox.critical(self, "DB 오류", f"테이블 준비 실패: {e}")
 
-        # 아두이노 컨트롤러
-        self.arduino = ArduinoController()  # 포트 자동 탐색
+        # 아두이노
+        self.arduino = ArduinoController()
 
-        # 감지 스레드 시작
-        self.det = DetectorThread(limit=DETECT_LIMIT, parent=self)
+        # 감지 스레드: 지연 시작(탭 임베드 환경에서 안전)
+        self.det = None
+        QTimer.singleShot(0, self.start_detector)
+
+        # 앱 종료/탭 닫기 대비 안전 종료
+        QApplication.instance().aboutToQuit.connect(self.stop_detector)
+
+        # 실시간 갱신 타이머
+        self.refresh_timer = QTimer(self)
+        self.refresh_timer.setInterval(1000)
+        self.refresh_timer.timeout.connect(self.refresh_parking_summary)
+        self.refresh_timer.start()
+        self.refresh_parking_summary()
+
+    # ===== 스레드 수명 관리 =====
+    def start_detector(self):
+        if self.det and self.det.isRunning():
+            return
+        self.det = DetectorThread(parent=self)
         self.det.plateDetected.connect(self.on_plate_detected)
-        self.det.frameReady.connect(self.on_frame_ready)    # 미리보기
+        self.det.frameReady.connect(self.on_frame_ready)
         self.det.done.connect(self.on_detect_done)
         self.det.start()
 
-        QApplication.instance().aboutToQuit.connect(self._cleanup_thread)
+    def stop_detector(self):
+        try:
+            if self.det:
+                try:
+                    self.det.plateDetected.disconnect()
+                    self.det.frameReady.disconnect()
+                    self.det.done.disconnect()
+                except Exception:
+                    pass
+                self.det.stop()
+                self.det.wait(1500)
+        except Exception:
+            pass
+        finally:
+            self.det = None
 
-    def _init_video_item(self, height: int = 240):
-        self.videoLabel = QLabel(self)
-        self.videoLabel.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.videoLabel.setText("웹캠 미리보기")
-        self.videoLabel.setMinimumHeight(height)
-        self.videoLabel.setStyleSheet("background:#111; color:#ccc;")
-
-        self.videoItem = QListWidgetItem(self.listPlates)
-        self.videoItem.setFlags(Qt.ItemFlag.NoItemFlags)
-        self.videoItem.setSizeHint(self.videoLabel.sizeHint())
-
-        self.listPlates.addItem(self.videoItem)
-        self.listPlates.setItemWidget(self.videoItem, self.videoLabel)
-
-    # 미리보기 프레임 수신 → 0번 셀에 그리기
+    # ===== 프리뷰 표시 =====
     def on_frame_ready(self, qimg: QImage):
-        if not getattr(self, "preview_enabled", True):
+        if not self.preview_enabled or self.videoLabel is None:
             return
         pix = QPixmap.fromImage(qimg)
-        cell_width = self.listPlates.viewport().width()
-        self.videoLabel.setPixmap(pix.scaled(
-            cell_width,
-            self.videoLabel.height(),
-            Qt.AspectRatioMode.KeepAspectRatio,
-            Qt.TransformationMode.SmoothTransformation
-        ))
+        self.videoLabel.setPixmap(
+            pix.scaled(
+                self.videoLabel.size(),
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation
+            )
+        )
 
-    # 번호 수신
+    # ===== 감지 이벤트 =====
     def on_plate_detected(self, plate: str):
         if plate.startswith("[ERR]") or plate.startswith("[WARN]"):
             QMessageBox.warning(self, "알림", plate); return
+
+        self.last_detected_plate = plate
+
         self.listPlates.addItem(plate)
-        # 선택이 바뀌면 on_plate_selection_changed가 DB 검사해서 버튼 상태를 갱신함
+        self.listPlates.setCurrentRow(self.listPlates.count()-1)
+
+        # 등록 차량이면 자동 OPEN + IN/OUT 토글
+        if self.is_registered(plate):
+            if self.openButton:
+                self.openButton.setEnabled(True)
+            self._auto_open_and_toggle(plate)
+        else:
+            if self.openButton:
+                self.openButton.setEnabled(False)
+
+    def _auto_open_and_toggle(self, number: str):
+        self.on_plate_selection_changed(number)
+
+        now = time.time()
+        last = self._last_auto_open_ts_by_plate.get(number, 0.0)
+        if now - last < self.min_auto_open_gap:
+            return
+        ok = self.arduino.send("OPEN\n")
+        self._last_auto_open_ts_by_plate[number] = now
+        if not ok:
+            QMessageBox.warning(self, "아두이노", f"OPEN 명령 전송 실패 ({number})")
+
+        try:
+            if is_currently_parked(number):
+                mark_out(number)
+                self.listPlates.addItem(f"[OUT] {number}")
+            else:
+                mark_in(number)
+                self.listPlates.addItem(f"[IN ] {number}")
+        except Exception as e:
+            QMessageBox.critical(self, "DB 오류", f"상태 갱신 실패: {e}")
+
+        self.refresh_parking_summary()
 
     def on_detect_done(self):
         pass
 
-    # 등록 버튼: 스레드 정지 → (인식된 번호) 등록 다이얼로그
+    # ===== 등록/수동 등록 =====
     def on_register_clicked(self):
-        self._cleanup_thread()
         items = self.listPlates.selectedItems()
         if not items:
             QMessageBox.information(self, "안내", "먼저 리스트에서 차량번호를 선택하세요."); return
         number = items[0].text().strip()
         dlg = RegisterDialog(number=number, parent=self)
-        if dlg.exec():   # 저장되었으면, 현재 선택 번호 기준으로 openButton 상태 갱신
+        if dlg.exec():
             self.on_plate_selection_changed(number)
 
-    # 🆕 newregisterButton: 스레드 정지 → (번호 직접 입력) 등록 다이얼로그
     def on_newregister_clicked(self):
-        self._cleanup_thread()
         dlg = ManualRegisterDialog(parent=self)
         if dlg.exec():
-            # 수동 등록 후에도, 만약 현재 선택된 번호가 DB에 존재하면 버튼 활성화 갱신
             cur = self.listPlates.currentItem()
             if cur:
                 self.on_plate_selection_changed(cur.text())
 
-    # 🔘 offButton: 미리보기(웹캠 화면)만 숨김
-    def on_off_clicked(self):
-        self.preview_enabled = False
-        try:
-            if hasattr(self, "videoItem") and self.videoItem is not None:
-                self.videoItem.setHidden(True)
-        except Exception:
-            pass
-        if hasattr(self, "videoLabel") and self.videoLabel is not None:
-            self.videoLabel.clear()
-            self.videoLabel.setText("")
-
-    # 🔓 openButton: 등록된 차량만 OPEN 신호 전송
+    # ===== 수동 OPEN =====
     def on_open_clicked(self):
+        number = None
         items = self.listPlates.selectedItems()
-        if not items:
-            QMessageBox.information(self, "안내", "차량번호를 선택하세요."); return
-        number = items[0].text().strip()
+        if items:
+            number = (items[0].text() or "").strip()
+        if not number and self.last_detected_plate:
+            number = self.last_detected_plate
+
+        if not number:
+            QMessageBox.information(self, "안내", "선택된 차량이 없고 최근 감지 기록도 없습니다.")
+            return
         if not self.is_registered(number):
-            QMessageBox.information(self, "안내", "등록된 차량이 아닙니다."); return
-        if not self.arduino.send("OPEN\n"):
+            QMessageBox.information(self, "안내", f"{number} : 등록된 차량이 아닙니다.")
+            return
+
+        if self.arduino.send("OPEN\n"):
+            try:
+                if is_currently_parked(number):
+                    mark_out(number)
+                    self.listPlates.addItem(f"[OUT] {number} (manual)")
+                else:
+                    mark_in(number)
+                    self.listPlates.addItem(f"[IN ] {number} (manual)")
+            except Exception as e:
+                QMessageBox.critical(self, "DB 오류", f"상태 갱신 실패: {e}")
+            self.refresh_parking_summary()
+        else:
             QMessageBox.warning(self, "아두이노", "OPEN 명령 전송 실패")
 
-    # 리스트 선택 변경 시: DB 검사해 openButton 활성/비활성
+    # ===== 관리 화면 (토글) =====
+    def on_manage_clicked(self):
+        if self.tableWidget2.isVisible():
+            self.tableWidget2.setVisible(False)
+            return
+
+        try:
+            rows = fetch_parking_manage_rows()
+        except Exception as e:
+            QMessageBox.critical(self, "DB 오류", f"관리 데이터 조회 실패: {e}")
+            return
+
+        self.tableWidget2.setRowCount(len(rows))
+        for i, r in enumerate(rows):
+            name = r.get("name","")
+            company = r.get("company","")
+            number = r.get("number","")
+            klass = r.get("class","")
+            is_parked = int(r.get("is_parked") or 0)
+            status_txt = "주차중" if is_parked == 1 else "미주차"
+
+            last_in  = r.get("last_in_time")
+            last_out = r.get("last_out_time")
+            last_in_str  = last_in.strftime("%Y-%m-%d %H:%M:%S") if last_in else ""
+            last_out_str = last_out.strftime("%Y-%m-%d %H:%M:%S") if last_out else ""
+
+            minutes = r.get("minutes_used")
+            dur_str = format_minutes_hms(minutes)
+            days_str = f"{(minutes // 1440)}일" if minutes is not None else ""
+
+            values = [name, company, number, klass,
+                      status_txt, last_in_str, last_out_str,
+                      dur_str, days_str]
+            for j, val in enumerate(values):
+                self.tableWidget2.setItem(i, j, QTableWidgetItem(str(val)))
+
+        self.tableWidget2.setVisible(True)
+
+    # ===== 기타 UI =====
+    def on_off_clicked(self):
+        self.preview_enabled = not self.preview_enabled
+        if self.videoLabel:
+            self.videoLabel.setVisible(self.preview_enabled)
+
     def on_plate_selection_changed(self, text: str):
         if not self.openButton:
             return
         number = (text or "").strip()
         self.openButton.setEnabled(bool(number) and self.is_registered(number))
 
-    # DB에 등록된 차량인지 확인
+    # ===== DB 조회 유틸 =====
     def is_registered(self, number: str) -> bool:
         try:
             conn = connect_db(); cur = conn.cursor()
@@ -509,25 +760,38 @@ class MainWindow(BaseClass, UiClass):
             cur.close(); conn.close()
             return exists
         except Exception as e:
-            print("[DB ERROR]", e)
+            print("[DB ERROR] is_registered:", e)
             return False
 
-    def _cleanup_thread(self):
-        if hasattr(self,"det") and self.det.isRunning():
-            self.det.stop()
-            self.det.wait(2000)
+    # ===== 실시간 요약 갱신 (label_2 + tableWidget) =====
+    def refresh_parking_summary(self):
+        try:
+            cnt = get_current_count()
+            self.parkingCountLabel.setText(f"실시간 주차정보: {cnt}대")
+        except Exception:
+            self.parkingCountLabel.setText("실시간 주차정보: -")
+
+        try:
+            rows = fetch_current_parked_rows()
+            self.tableWidget.setRowCount(len(rows))
+            for i, row in enumerate(rows):
+                for j, val in enumerate(row):
+                    self.tableWidget.setItem(i, j, QTableWidgetItem(str(val)))
+        except Exception:
+            self.tableWidget.setRowCount(0)
+
+    # ===== 종료 정리 =====
+    def closeEvent(self, e):
+        self.stop_detector()
         if hasattr(self, "arduino") and self.arduino:
             self.arduino.close()
-
-    def closeEvent(self, e):
-        self._cleanup_thread()
         super().closeEvent(e)
 
 # ================== 엔트리 ==================
 def main():
     app = QApplication(sys.argv)
     w = MainWindow()
-    w.setWindowTitle("Parking ANPR – 등록/수동등록 + DB 검증 + Arduino OPEN")
+    w.setWindowTitle("Parking ANPR – 실시간 프리뷰/대수/목록 + 자동/수동 OPEN + 관리뷰(토글)")
     w.show()
     sys.exit(app.exec())
 
