@@ -32,13 +32,7 @@ class IntegrationWindow(QMainWindow):
     def update_status(self):
         # DB에서 상태 조회 (예시)
         try:
-            db_conn = mysql.connector.connect(
-                host="database-1.c1kkeqig4j9x.ap-northeast-2.rds.amazonaws.com",
-                port=3306,
-                user="root",
-                password="12345678",  # RDS 비밀번호
-                database="joeffice"
-            )
+            db_conn = mysql.connector.connect(host='localhost', user='root', password='password', database='meeting_db')
             cursor = db_conn.cursor()
             cursor.execute("SELECT status FROM system_status LIMIT 1")
             status = cursor.fetchone()
@@ -58,13 +52,8 @@ class IntegrationWindow(QMainWindow):
     def sync_admin(self):
         if self.user_role == "admin":
             try:
-                db_conn = mysql.connector.connect(
-                    host="database-1.c1kkeqig4j9x.ap-northeast-2.rds.amazonaws.com",
-                    port=3306,
-                    user="root",
-                    password="12345678",  # RDS 비밀번호
-                    database="joeffice"
-                )
+                # DB 업데이트 (예시)
+                db_conn = mysql.connector.connect(host='localhost', user='root', password='password', database='meeting_db')
                 cursor = db_conn.cursor()
                 cursor.execute("UPDATE system_status SET status = '동기화 완료' WHERE id = 1")
                 db_conn.commit()
@@ -109,3 +98,4 @@ class IntegrationWindow(QMainWindow):
     def closeEvent(self, event):
         self.conn.close()
         event.accept()
+

@@ -3,7 +3,12 @@
  <class>ReservationWindow</class>
  <widget class="QMainWindow" name="ReservationWindow">
   <property name="geometry">
-   <rect><x>0</x><y>0</y><width>800</width><height>600</height></rect>
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>800</width>
+    <height>600</height>
+   </rect>
   </property>
   <property name="windowTitle">
    <string>회의실 예약 관리</string>
@@ -16,7 +21,33 @@
        <string>회의실 목록</string>
       </property>
       <layout class="QVBoxLayout" name="verticalLayout_2">
-       <item><widget class="QTableWidget" name="roomTable"><property name="columnCount"><number>4</number></property><column><property name="text"><string>회의실명</string></property></column><column><property name="text"><string>수용 인원</string></property></column><column><property name="text"><string>위치</string></property></column><column><property name="text"><string>장비</string></property></column></widget></item>
+       <item>
+        <widget class="QTableWidget" name="roomTable">
+         <property name="columnCount">
+          <number>4</number>
+         </property>
+         <column>
+          <property name="text">
+           <string>회의실명</string>
+          </property>
+         </column>
+         <column>
+          <property name="text">
+           <string>수용 인원</string>
+          </property>
+         </column>
+         <column>
+          <property name="text">
+           <string>위치</string>
+          </property>
+         </column>
+         <column>
+          <property name="text">
+           <string>장비</string>
+          </property>
+         </column>
+        </widget>
+       </item>
       </layout>
      </widget>
     </item>
@@ -26,8 +57,56 @@
        <string>실시간 예약 현황</string>
       </property>
       <layout class="QVBoxLayout" name="verticalLayout_3">
-       <item><widget class="QCalendarWidget" name="calendarView"/></item>
-       <item><widget class="QTableWidget" name="reservationTable"><property name="columnCount"><number>8</number></property><column><property name="text"><string>예약 ID</string></property></column><column><property name="text"><string>회의실명</string></property></column><column><property name="text"><string>시작 날짜</string></property></column><column><property name="text"><string>시작 시간</string></property></column><column><property name="text"><string>종료 날짜</string></property></column><column><property name="text"><string>종료 시간</string></property></column><column><property name="text"><string>예약자 ID</string></property></column><column><property name="text"><string>예약자 이름</string></property></column></widget></item>
+       <item>
+        <widget class="QCalendarWidget" name="calendarView"/>
+       </item>
+       <item>
+        <widget class="QTableWidget" name="reservationTable">
+         <property name="columnCount">
+          <number>8</number>
+         </property>
+         <column>
+          <property name="text">
+           <string>UID</string>
+          </property>
+         </column>
+         <column>
+          <property name="text">
+           <string>이름</string>
+          </property>
+         </column>
+         <column>
+          <property name="text">
+           <string>회사</string>
+          </property>
+         </column>
+         <column>
+          <property name="text">
+           <string>회의실명</string>
+          </property>
+         </column>
+         <column>
+          <property name="text">
+           <string>시작 시간</string>
+          </property>
+         </column>
+         <column>
+          <property name="text">
+           <string>종료 시간</string>
+          </property>
+         </column>
+         <column>
+          <property name="text">
+           <string>인증 번호</string>
+          </property>
+         </column>
+         <column>
+          <property name="text">
+           <string>상태</string>
+          </property>
+         </column>
+        </widget>
+       </item>
       </layout>
      </widget>
     </item>
@@ -39,35 +118,97 @@
       <layout class="QVBoxLayout" name="verticalLayout_4">
        <item>
         <layout class="QHBoxLayout">
-         <item><widget class="QLabel" name="roomLabel"><property name="text"><string>회의실:</string></property></widget></item>
-         <item><widget class="QComboBox" name="roomComboBox"/></item>
+         <item>
+          <widget class="QLabel" name="roomLabel">
+           <property name="text">
+            <string>회의실:</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QComboBox" name="roomComboBox"/>
+         </item>
         </layout>
        </item>
        <item>
         <layout class="QHBoxLayout" name="horizontalLayout_1">
-         <item><widget class="QLabel" name="startingDateLabel"><property name="text"><string>시작 날짜:</string></property></widget></item>
-         <item><widget class="QDateEdit" name="startingDateInput"/></item>
-         <item><widget class="QLabel" name="startingTimeLabel"><property name="text"><string>시작 시간:</string></property></widget></item>
-         <item><widget class="QTimeEdit" name="startingTimeInput"/></item>
+         <item>
+          <widget class="QLabel" name="startingDateLabel">
+           <property name="text">
+            <string>시작 날짜:</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QDateEdit" name="startingDateInput"/>
+         </item>
+         <item>
+          <widget class="QLabel" name="startingTimeLabel">
+           <property name="text">
+            <string>시작 시간:</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QTimeEdit" name="startingTimeInput"/>
+         </item>
         </layout>
        </item>
        <item>
         <layout class="QHBoxLayout" name="horizontalLayout_2">
-         <item><widget class="QLabel" name="endingDateLabel"><property name="text"><string>종료 날짜:</string></property></widget></item>
-         <item><widget class="QDateEdit" name="endingDateInput"/></item>
-         <item><widget class="QLabel" name="endingTimeLabel"><property name="text"><string>종료 시간:</string></property></widget></item>
-         <item><widget class="QTimeEdit" name="endingTimeInput"/></item>
+         <item>
+          <widget class="QLabel" name="endingDateLabel">
+           <property name="text">
+            <string>종료 날짜:</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QDateEdit" name="endingDateInput"/>
+         </item>
+         <item>
+          <widget class="QLabel" name="endingTimeLabel">
+           <property name="text">
+            <string>종료 시간:</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QTimeEdit" name="endingTimeInput"/>
+         </item>
         </layout>
        </item>
        <item>
         <layout class="QHBoxLayout" name="horizontalLayout_3">
-         <item><widget class="QLabel" name="userIDLabel"><property name="text"><string>예약자 ID:</string></property></widget></item>
-         <item><widget class="QLineEdit" name="userIDInput"/></item>
-         <item><widget class="QLabel" name="userNameLabel"><property name="text"><string>예약자 이름:</string></property></widget></item>
-         <item><widget class="QLineEdit" name="userNameInput"/></item>
+         <item>
+          <widget class="QLabel" name="userIDLabel">
+           <property name="text">
+            <string>직원 코드 (UID):</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QLineEdit" name="userIDInput"/>
+         </item>
+         <item>
+          <widget class="QLabel" name="userNameLabel">
+           <property name="text">
+            <string>이름:</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QLineEdit" name="userNameInput"/>
+         </item>
         </layout>
        </item>
-       <item><widget class="QPushButton" name="createBtn"><property name="text"><string>예약 생성</string></property></widget></item>
+       <item>
+        <widget class="QPushButton" name="createBtn">
+         <property name="text">
+          <string>예약 생성</string>
+         </property>
+        </widget>
+       </item>
       </layout>
      </widget>
     </item>

@@ -1,34 +1,66 @@
-from PyQt6.QtWidgets import QMainWindow, QMessageBox, QTableWidgetItem, QLineEdit
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+import sys
+from PyQt6.QtWidgets import QMainWindow, QMessageBox, QTableWidgetItem, QLineEdit, QAbstractItemView, QComboBox
 from PyQt6 import uic
 from PyQt6.QtCore import QTimer, QDate, QTime, QLocale, QDateTime
 import mysql.connector
-from datetime import datetime
+from datetime import datetime, timedelta
+import random
 
 class ReservationWindow(QMainWindow):
-    def __init__(self, user_role):
+    def __init__(self, user_role, current_user_id="bombtol"):
         super().__init__()
-        uic.loadUi("reservation.ui", self)
+        try:
+            uic.loadUi("reservation.ui", self)
+        except FileNotFoundError:
+            QMessageBox.critical(self, "오류", "reservation.ui 파일을 찾을 수 없습니다.")
+            sys.exit(1)
+            
         self.user_role = user_role
+        self.current_user_id = current_user_id
         self.db_conn = None
         self.rooms = {}
+        self.users = {}
         self.connect_db()
-        self.timer = QTimer()
-        self.timer.timeout.connect(self.update_reservations)
-        self.timer.start(5000)
 
+        # 현재 시간으로 초기값 설정
+        now = datetime.now()
+        one_hour_later = now + timedelta(hours=1)
+        
+        # 시작 날짜/시간을 현재 시간으로 설정
         self.startingDateInput.setCalendarPopup(True)
         self.startingDateInput.setLocale(QLocale(QLocale.Language.English, QLocale.Country.UnitedStates))
         self.startingDateInput.setDisplayFormat("yyyy-MM-dd")
-
+        self.startingDateInput.setDate(QDate(now.year, now.month, now.day))
+        self.startingTimeInput.setTime(QTime(now.hour, now.minute, now.second))
+        
+        # 종료 날짜/시간을 한 시간 뒤로 설정
         self.endingDateInput.setCalendarPopup(True)
         self.endingDateInput.setLocale(QLocale(QLocale.Language.English, QLocale.Country.UnitedStates))
         self.endingDateInput.setDisplayFormat("yyyy-MM-dd")
+        self.endingDateInput.setDate(QDate(one_hour_later.year, one_hour_later.month, one_hour_later.day))
+        self.endingTimeInput.setTime(QTime(one_hour_later.hour, one_hour_later.minute, one_hour_later.second))
+        
+        self.userIDInput.setText(self.current_user_id)
+        self.userIDInput.setDisabled(False) 
+        self.userNameInput.setDisabled(False)
+        
+        self.reservationTable.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.reservationTable.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.reservationTable.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
 
         self.createBtn.clicked.connect(self.create_reservation)
         self.editCancelBtn.clicked.connect(self.edit_cancel_reservation)
         self.calendarView.selectionChanged.connect(self.update_reservations)
 
+        self.timer = QTimer()
+        self.timer.timeout.connect(self.update_reservations)
+        self.timer.start(5000)
+
         self.toggle_buttons()
+        self.load_users()
         self.update_rooms()
         self.update_rooms_combobox()
         self.update_reservations()
@@ -46,10 +78,23 @@ class ReservationWindow(QMainWindow):
         except mysql.connector.Error as err:
             self.statusbar.showMessage(f"DB 연결 실패: {err}")
             QMessageBox.critical(self, "오류", f"데이터베이스 연결 실패: {err}")
+            sys.exit(1)
+
+    def load_users(self):
+        self.users = {}
+        if self.db_conn and self.db_conn.is_connected():
+            try:
+                cursor = self.db_conn.cursor()
+                cursor.execute("SELECT uid, name, company FROM users")
+                for uid, name, company in cursor.fetchall():
+                    self.users[uid] = {'name': name, 'company': company}
+            except Exception as e:
+                print(f"사용자 정보 로드 실패: {e}")
 
     def toggle_buttons(self):
-        self.createBtn.setEnabled(self.user_role in ["user", "admin"])
-        self.editCancelBtn.setEnabled(self.user_role in ["user", "admin"])
+        is_allowed = self.user_role in ["user", "admin"]
+        self.createBtn.setEnabled(is_allowed)
+        self.editCancelBtn.setEnabled(is_allowed)
 
     def update_rooms(self):
         if self.db_conn and self.db_conn.is_connected():
@@ -76,103 +121,164 @@ class ReservationWindow(QMainWindow):
                 self.roomComboBox.clear()
                 self.roomComboBox.addItems(room_names)
             except Exception as e:
-                self.statusbar.showMessage(f"회의실 콤보박스 갱신 실패: {e}")
+                self.statusbar.showMessage(f"회의실 목록 갱신 실패: {e}")
 
     def update_reservations(self):
         if self.db_conn and self.db_conn.is_connected():
             try:
                 cursor = self.db_conn.cursor()
                 cursor.execute("""
-                    SELECT reservation_id, room_name, start_datetime, end_datetime, user_id, user_name
+                    SELECT 
+                        uid,
+                        name,
+                        company,
+                        room_name,
+                        start_time,
+                        end_time,
+                        auth_code,
+                        reservation_status
                     FROM reservations
-                    WHERE DATE(start_datetime) = %s
+                    WHERE DATE(start_time) = %s
                 """, (self.calendarView.selectedDate().toPyDate(),))
                 reservations = cursor.fetchall()
                 
-                self.reservationTable.setColumnCount(6)
-                self.reservationTable.setHorizontalHeaderLabels(["예약 ID", "회의실명", "시작 시간", "종료 시간", "예약자 ID", "예약자 이름"])
+                self.reservationTable.setColumnCount(8)
+                self.reservationTable.setHorizontalHeaderLabels([
+                    "UID", "이름", "회사", "회의실명", "시작 시간", "종료 시간",
+                    "인증 번호", "상태"
+                ])
                 self.reservationTable.setRowCount(len(reservations))
                 
-                for row, (res_id, room_name, start_dt, end_dt, user_id, user_name) in enumerate(reservations):
-                    self.reservationTable.setItem(row, 0, QTableWidgetItem(str(res_id)))
-                    self.reservationTable.setItem(row, 1, QTableWidgetItem(room_name))
-                    self.reservationTable.setItem(row, 2, QTableWidgetItem(start_dt.strftime('%Y-%m-%d %H:%M:%S')))
-                    self.reservationTable.setItem(row, 3, QTableWidgetItem(end_dt.strftime('%Y-%m-%d %H:%M:%S')))
-                    self.reservationTable.setItem(row, 4, QTableWidgetItem(user_id))
-                    self.reservationTable.setItem(row, 5, QTableWidgetItem(user_name or ""))
+                for row, (uid, name, company, room_name, start_dt, end_dt, auth_code, status) in enumerate(reservations):
+                    self.reservationTable.setItem(row, 0, QTableWidgetItem(uid))
+                    self.reservationTable.setItem(row, 1, QTableWidgetItem(name))
+                    self.reservationTable.setItem(row, 2, QTableWidgetItem(company))
+                    self.reservationTable.setItem(row, 3, QTableWidgetItem(room_name))
+                    self.reservationTable.setItem(row, 4, QTableWidgetItem(start_dt.strftime('%Y-%m-%d %H:%M:%S')))
+                    self.reservationTable.setItem(row, 5, QTableWidgetItem(end_dt.strftime('%Y-%m-%d %H:%M:%S')))
+                    self.reservationTable.setItem(row, 6, QTableWidgetItem(auth_code or "N/A"))
+                    self.reservationTable.setItem(row, 7, QTableWidgetItem(status))
             except Exception as e:
                 self.statusbar.showMessage(f"예약 현황 갱신 실패: {e}")
-                print(f"Debug - update_reservations error: {e}")
 
     def create_reservation(self):
-        if self.user_role in ["user", "admin"] and self.db_conn and self.db_conn.is_connected():
-            try:
-                selected_room_name = self.roomComboBox.currentText()
-                start_date = self.startingDateInput.date().toPyDate()
-                start_time = self.startingTimeInput.time().toPyTime()
-                end_date = self.endingDateInput.date().toPyDate()
-                end_time = self.endingTimeInput.time().toPyTime()
+        if self.user_role not in ["user", "admin"] or not self.db_conn or not self.db_conn.is_connected():
+            QMessageBox.warning(self, "권한 없음", "예약 권한이 없습니다.")
+            return
 
-                user_id = self.userIDInput.text().strip()
-                user_name = self.userNameInput.text().strip()
+        try:
+            selected_room_name = self.roomComboBox.currentText()
+            
+            start_date = self.startingDateInput.date().toPyDate()
+            start_time = self.startingTimeInput.time().toPyTime()
+            end_date = self.endingDateInput.date().toPyDate()
+            end_time = self.endingTimeInput.time().toPyTime()
 
-                if not user_id or not user_name:
-                    QMessageBox.warning(self, "경고", "예약자 ID와 이름을 모두 입력해주세요.")
-                    return
-                
-                # DATETIME 결합
-                start_datetime = datetime.combine(start_date, start_time)
-                end_datetime = datetime.combine(end_date, end_time)
-                if end_datetime <= start_datetime:
-                    QMessageBox.warning(self, "시간 오류", "종료 시간이 시작 시간보다 늦어야 합니다.")
-                    return
+            start_datetime = datetime.combine(start_date, start_time)
+            end_datetime = datetime.combine(end_date, end_time)
 
-                cursor = self.db_conn.cursor()
-                cursor.execute("""
-                    SELECT COUNT(*)
-                    FROM reservations
-                    WHERE room_name = %s
-                    AND (
-                        (start_datetime < %s AND end_datetime > %s) OR
-                        (start_datetime < %s AND end_datetime >= %s)
-                    )
-                """, (selected_room_name, end_datetime, start_datetime, end_datetime, start_datetime))
-                if cursor.fetchone()[0] > 0:
-                    QMessageBox.warning(self, "중복 예약", "선택한 시간대에 이미 예약이 있습니다.")
-                    return
+            if end_datetime <= start_datetime:
+                QMessageBox.warning(self, "시간 오류", "종료 시간이 시작 시간보다 늦어야 합니다.")
+                return
 
-                cursor.execute("""
-                    INSERT INTO reservations (user_id, user_name, room_name, start_datetime, end_datetime, status)
-                    VALUES (%s, %s, %s, %s, %s, 'pending')
-                """, (user_id, user_name, selected_room_name, start_datetime, end_datetime))
-                self.db_conn.commit()
-                self.statusbar.showMessage("예약 생성 성공")
-                self.update_reservations()
-            except Exception as e:
-                self.statusbar.showMessage(f"예약 생성 실패: {e}")
-                print(f"Debug - create_reservation error: {e}")
-                QMessageBox.critical(self, "오류", f"예약 생성 실패: {e}")
+            cursor = self.db_conn.cursor()
+            
+            # 쿼리 수정: room_name 대신 room_id를 사용하도록 변경
+            room_id = self.rooms.get(selected_room_name)
+            if not room_id:
+                QMessageBox.warning(self, "경고", "유효한 회의실이 선택되지 않았습니다.")
+                return
+
+            cursor.execute("""
+                SELECT COUNT(*)
+                FROM reservations
+                WHERE room_id = %s
+                AND NOT (end_time <= %s OR start_time >= %s)
+            """, (room_id, start_datetime, end_datetime))
+            
+            if cursor.fetchone()[0] > 0:
+                QMessageBox.warning(self, "중복 예약", "선택한 시간대에 이미 예약이 있습니다.")
+                return
+            
+            uid = self.userIDInput.text().strip()
+            name_input = self.userNameInput.text().strip()
+            if not uid or not name_input:
+                QMessageBox.warning(self, "경고", "직원 코드와 이름을 모두 입력하세요.")
+                return
+            
+            cursor.execute("SELECT name, company FROM users WHERE uid = %s AND name = %s", (uid, name_input))
+            user_info_tuple = cursor.fetchone()
+
+            if not user_info_tuple:
+                QMessageBox.warning(self, "경고", "일치하는 사용자 정보가 없습니다. 직원 코드와 이름을 확인하세요.")
+                return
+
+            name, company = user_info_tuple
+            
+            auth_code = str(random.randint(1000, 9999))
+            
+            # 수정된 INSERT 쿼리: room_id를 사용
+            cursor.execute("""
+                INSERT INTO reservations (uid, name, company, room_id, start_time, end_time, auth_code, reservation_status)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, 'BOOKED')
+            """, (uid, name, company, room_id, start_datetime, end_datetime, auth_code))
+            
+            self.db_conn.commit()
+            
+            QMessageBox.information(self, "예약 생성 성공", 
+                                    f"예약이 생성되었습니다.\n\n"
+                                    f"회의실: {selected_room_name}\n"
+                                    f"시간: {start_datetime.strftime('%Y-%m-%d %H:%M')} ~ {end_datetime.strftime('%Y-%m-%d %H:%M')}\n"
+                                    f"인증 번호: {auth_code}")
+            
+            self.statusbar.showMessage("예약 생성 성공")
+            self.update_reservations()
+        except Exception as e:
+            self.statusbar.showMessage(f"예약 생성 실패: {e}")
+            QMessageBox.critical(self, "오류", f"예약 생성 실패: {e}")
 
     def edit_cancel_reservation(self):
-        if self.user_role in ["user", "admin"] and self.db_conn and self.db_conn.is_connected():
-            selected_row = self.reservationTable.currentRow()
-            if selected_row >= 0:
-                res_id = int(self.reservationTable.item(selected_row, 0).text())
-                user_id = self.reservationTable.item(selected_row, 4).text()
-                if self.user_role == "admin" or user_id == "user1":
-                    action = QMessageBox.question(self, "작업 선택", "수정할까요, 취소할까요?", QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel)
-                    if action == QMessageBox.Yes:
-                        pass  # 수정 로직은 나중에 구현
-                    elif action == QMessageBox.No:
-                        cursor = self.db_conn.cursor()
-                        cursor.execute("DELETE FROM reservations WHERE reservation_id = %s", (res_id,))
-                        self.db_conn.commit()
-                        self.statusbar.showMessage("예약 취소 성공")
+        if self.user_role not in ["user", "admin"] or not self.db_conn or not self.db_conn.is_connected():
+            QMessageBox.warning(self, "권한 없음", "예약 권한이 없습니다.")
+            return
+
+        selected_row = self.reservationTable.currentRow()
+        if selected_row < 0:
+            QMessageBox.warning(self, "경고", "예약 목록에서 취소할 예약을 선택하세요.")
+            return
+
+        res_uid = self.reservationTable.item(selected_row, 0).text()
+        res_start_time_str = self.reservationTable.item(selected_row, 4).text()
+        res_start_time = datetime.strptime(res_start_time_str, '%Y-%m-%d %H:%M:%S')
+
+        if self.user_role == "admin" or res_uid == self.current_user_id:
+            action = QMessageBox.question(self, "작업 선택", "선택한 예약을 취소할까요?",
+                                          QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                                          QMessageBox.StandardButton.No)
+            if action == QMessageBox.StandardButton.Yes:
+                try:
+                    cursor = self.db_conn.cursor()
+                    cursor.execute("""
+                        UPDATE reservations SET reservation_status = 'CANCELED' 
+                        WHERE uid = %s AND start_time = %s
+                    """, (res_uid, res_start_time))
+                    self.db_conn.commit()
+                    self.statusbar.showMessage("예약 취소 성공")
                     self.update_reservations()
-                else:
-                    QMessageBox.warning(self, "권한 오류", "본인 예약 또는 관리자 권한이 필요합니다.")
+                except Exception as e:
+                    self.statusbar.showMessage(f"예약 취소 실패: {e}")
+                    QMessageBox.critical(self, "오류", f"예약 취소 실패: {e}")
+        else:
+            QMessageBox.warning(self, "권한 오류", "본인 예약 또는 관리자 권한이 필요합니다.")
 
     def closeEvent(self, event):
         if self.db_conn:
             self.db_conn.close()
         event.accept()
+
+if __name__ == '__main__':
+    from PyQt6.QtWidgets import QApplication
+    app = QApplication(sys.argv)
+    window = ReservationWindow(user_role="user", current_user_id="651ac301") 
+    window.show()
+    sys.exit(app.exec())

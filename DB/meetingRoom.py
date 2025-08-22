@@ -1,4 +1,3 @@
-import mysql.connector
 from mysql.connector import Error
 
 def create_reservation_tables():
