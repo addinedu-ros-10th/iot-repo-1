@@ -10,7 +10,7 @@ DHT dht(DHTPIN, DHTTYPE);
 
 // 상태 표시 LED: R=히터, G=쾌적, B=에어컨
 const int R_LED = 3, G_LED = 5, B_LED = 6;
-// 회의실 점유 표시(체크인 성공 시 ON)
+// 회의실 점유 표시(체크인 성공 시 ON)  LED 7번 핀 연결하기
 const int HVAC_POWER_LED = 7;
 
 bool hvac_enable = false;  // 기본 차단
