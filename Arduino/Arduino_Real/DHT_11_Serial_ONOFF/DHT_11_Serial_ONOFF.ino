@@ -167,19 +167,19 @@ void loop() {
 
     handleControl(temperature); // enable + 히스테리시스 반영
 
-    // // 상태 로그(모니터링용)
-    // Serial.print(F("Temperature: "));
-    // Serial.print(temperature, 1);
-    // Serial.print(F(" C, Humidity: "));
-    // Serial.print(humidity, 1);
-    // Serial.print(F(" %, ENABLE="));
-    // Serial.print(hvac_enable ? "1" : "0");
-    // Serial.print(F(", STATE="));
-    // switch (state) {
-    //   case DISABLED: Serial.println(F("DISABLED")); break;
-    //   case IDLE:     Serial.println(F("IDLE"));     break;
-    //   case COOLING:  Serial.println(F("COOLING"));  break;
-    //   case HEATING:  Serial.println(F("HEATING"));  break;
-    // }
+    // 상태 로그(모니터링용)
+    Serial.print(F("Temperature: "));
+    Serial.print(temperature, 1);
+    Serial.print(F(" C, Humidity: "));
+    Serial.print(humidity, 1);
+    Serial.print(F(" %, ENABLE="));
+    Serial.print(hvac_enable ? "1" : "0");
+    Serial.print(F(", STATE="));
+    switch (state) {
+      case DISABLED: Serial.println(F("DISABLED")); break;
+      case IDLE:     Serial.println(F("IDLE"));     break;
+      case COOLING:  Serial.println(F("COOLING"));  break;
+      case HEATING:  Serial.println(F("HEATING"));  break;
+    }
   }
 }

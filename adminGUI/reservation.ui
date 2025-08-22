@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>800</width>
-    <height>600</height>
+    <width>1350</width>
+    <height>800</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -20,7 +20,15 @@
       <property name="title">
        <string>회의실 목록</string>
       </property>
-      <layout class="QVBoxLayout" name="verticalLayout_2">
+      <layout class="QVBoxLayout" name="verticalLayout_2"/>
+     </widget>
+    </item>
+    <item>
+     <widget class="QGroupBox" name="reservationStatusGroup">
+      <property name="title">
+       <string>실시간 예약 현황</string>
+      </property>
+      <layout class="QVBoxLayout" name="verticalLayout_3">
        <item>
         <widget class="QTableWidget" name="roomTable">
          <property name="columnCount">
@@ -48,15 +56,6 @@
          </column>
         </widget>
        </item>
-      </layout>
-     </widget>
-    </item>
-    <item>
-     <widget class="QGroupBox" name="reservationStatusGroup">
-      <property name="title">
-       <string>실시간 예약 현황</string>
-      </property>
-      <layout class="QVBoxLayout" name="verticalLayout_3">
        <item>
         <widget class="QCalendarWidget" name="calendarView"/>
        </item>
@@ -188,7 +187,7 @@
           </widget>
          </item>
          <item>
-          <widget class="QLineEdit" name="userIDInput"/>
+          <widget class="QComboBox" name="userIDComboBox"/>
          </item>
          <item>
           <widget class="QLabel" name="userNameLabel">
@@ -198,7 +197,14 @@
           </widget>
          </item>
          <item>
-          <widget class="QLineEdit" name="userNameInput"/>
+          <widget class="QLineEdit" name="userNameInput">
+           <property name="enabled">
+            <bool>false</bool>
+           </property>
+           <property name="readOnly">
+            <bool>true</bool>
+           </property>
+          </widget>
          </item>
         </layout>
        </item>

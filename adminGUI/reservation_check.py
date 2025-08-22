@@ -2,8 +2,9 @@
 # -*- coding: utf-8 -*-
 
 import sys
-from PyQt6.QtWidgets import QMainWindow, QMessageBox, QApplication, QComboBox
+from PyQt6.QtWidgets import QMainWindow, QMessageBox, QApplication, QComboBox, QWidget, QVBoxLayout, QLabel, QGroupBox, QLineEdit, QFrame
 from PyQt6 import uic
+from PyQt6.QtCore import Qt
 import mysql.connector
 from datetime import datetime
 
@@ -22,7 +23,7 @@ class ReservationCheckWindow(QMainWindow):
         self.load_users()
         self.load_users_to_combobox()
 
-        # '인증 확인' 버튼 클릭 시 find_auth_code 함수 호출
+        # '예약 정보 확인' 버튼 클릭 시 find_auth_code 함수 호출
         self.verifyBtn.clicked.connect(self.find_auth_code)
 
     def connect_db(self):
@@ -56,50 +57,51 @@ class ReservationCheckWindow(QMainWindow):
             self.userIDComboBox.clear()
             uids = sorted(self.users.keys())
             self.userIDComboBox.addItems(uids)
-            # 이름 자동 채우기 로직은 제거합니다.
-            # self.userIDComboBox.currentIndexChanged.connect(self.update_user_name_input)
-            # self.update_user_name_input()
+            self.userIDComboBox.currentIndexChanged.connect(self.update_user_name_input)
         else:
             print("UI에 userIDComboBox가 정의되지 않았습니다.")
             
     def update_user_name_input(self):
         """ automatically fills the name field based on the selected UID """
-        # 이름 자동 채우기 로직은 제거합니다.
-        pass
+        selected_uid = self.userIDComboBox.currentText()
+        if selected_uid in self.users:
+            self.userNameInput.setText(self.users[selected_uid])
+        else:
+            self.userNameInput.clear()
 
     def find_auth_code(self):
         """직원 코드와 이름으로 예약 인증번호를 조회하는 함수"""
         uid = self.userIDComboBox.currentText().strip()
-        # 사용자가 직접 입력한 이름을 가져옵니다.
         user_name = self.userNameInput.text().strip()
 
         if not uid or not user_name:
-            QMessageBox.warning(self, "경고", "직원 코드와 사용자 이름을 모두 선택/입력하세요.")
+            QMessageBox.warning(self, "경고", "직원 코드와 사용자 이름을 모두 선택하세요.")
             return
+
+        # 기존 동적 위젯 초기화
+        self.clear_dynamic_widgets()
 
         try:
             cursor = self.db_conn.cursor()
             now = datetime.now()
             
-            # uid와 name으로 유효한 BOOKED 상태의 예약을 찾음
+            # 예약 시작 시간 전에도 확인 가능하도록 조건 변경
             cursor.execute("""
-                SELECT r.auth_code
+            SELECT r.auth_code, r.room_name, r.start_time, r.end_time
                 FROM reservations r
                 LEFT JOIN users u ON r.uid = u.uid
                 WHERE r.uid = %s AND u.name = %s
-                AND r.start_time <= %s AND r.end_time >= %s
+                AND (r.start_time >= %s OR (r.start_time <= %s AND r.end_time >= %s))
                 AND r.reservation_status = 'BOOKED'
-                ORDER BY r.start_time ASC LIMIT 1
-            """, (uid, user_name, now, now))
+                ORDER BY r.start_time ASC
+            """,     (uid, user_name, now, now, now))
             
-            result = cursor.fetchone()
+            results = cursor.fetchall()
             
-            if result:
-                auth_code = result[0]
-                self.authCodeInput.setText(auth_code)
+            if results:
                 self.statusLabel.setText("상태: <font color='blue'>예약 정보가 확인되었습니다.</font>")
+                self.create_dynamic_widgets(results)
             else:
-                self.authCodeInput.clear()
                 self.statusLabel.setText("상태: <font color='red'>일치하는 예약 정보가 없습니다.</font>")
 
         except Exception as e:
@@ -107,6 +109,47 @@ class ReservationCheckWindow(QMainWindow):
             self.statusLabel.setText("상태: <font color='red'>오류 발생</font>")
         finally:
             cursor.close()
+
+    def create_dynamic_widgets(self, reservations):
+        """ 여러 예약 정보를 동적으로 생성하여 표시 """
+        group_box = self.reservationDetailsGroup
+        
+        # 기존 레이아웃을 제거하고 새로 만듭니다.
+        if group_box.layout():
+            layout = group_box.layout()
+            while layout.count():
+                child = layout.takeAt(0)
+                if child.widget():
+                    child.widget().deleteLater()
+        
+        layout = QVBoxLayout(group_box)
+
+        for auth_code, room_name, start_time, end_time in reservations:
+            reservation_info_label = QLabel(
+                f"<b>회의실:</b> {room_name}<br>"
+                f"<b>시작:</b> {start_time.strftime('%Y-%m-%d %H:%M:%S')}<br>"
+                f"<b>종료:</b> {end_time.strftime('%Y-%m-%d %H:%M:%S')}<br>"
+                f"<b>인증 번호:</b> <font color='blue' size='5'><b>{auth_code}</b></font>"
+            )
+            reservation_info_label.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+            layout.addWidget(reservation_info_label)
+            
+            line = QFrame(group_box)
+            line.setFrameShape(QFrame.Shape.HLine)
+            line.setFrameShadow(QFrame.Shadow.Sunken)
+            layout.addWidget(line)
+        
+        # 새로운 레이아웃을 QGroupBox에 설정
+        group_box.setLayout(layout)
+
+    def clear_dynamic_widgets(self):
+        """ 기존 동적 위젯을 제거 """
+        group_box = self.reservationDetailsGroup
+        if group_box.layout():
+            while group_box.layout().count():
+                child = group_box.layout().takeAt(0)
+                if child.widget():
+                    child.widget().deleteLater()
 
     def closeEvent(self, event):
         if self.db_conn:
