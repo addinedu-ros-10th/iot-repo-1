@@ -1,5 +1,4 @@
 // DHT-11 온습도센서 + 3색 LED + 점유 플래그(Serial 명령)
-// 명령 예시(시리얼 모니터, "Both NL & CR"로 전송 추천):
 //   HE 1   -> FIRST IN 이후(허용)
 //   HE 0   -> LAST OUT 이후(차단)
 //   HR     -> 상태 요청
@@ -168,19 +167,19 @@ void loop() {
 
     handleControl(temperature); // enable + 히스테리시스 반영
 
-    // 상태 로그(모니터링용)
-    Serial.print(F("Temperature: "));
-    Serial.print(temperature, 1);
-    Serial.print(F(" C, Humidity: "));
-    Serial.print(humidity, 1);
-    Serial.print(F(" %, ENABLE="));
-    Serial.print(hvac_enable ? "1" : "0");
-    Serial.print(F(", STATE="));
-    switch (state) {
-      case DISABLED: Serial.println(F("DISABLED")); break;
-      case IDLE:     Serial.println(F("IDLE"));     break;
-      case COOLING:  Serial.println(F("COOLING"));  break;
-      case HEATING:  Serial.println(F("HEATING"));  break;
-    }
+    // // 상태 로그(모니터링용)
+    // Serial.print(F("Temperature: "));
+    // Serial.print(temperature, 1);
+    // Serial.print(F(" C, Humidity: "));
+    // Serial.print(humidity, 1);
+    // Serial.print(F(" %, ENABLE="));
+    // Serial.print(hvac_enable ? "1" : "0");
+    // Serial.print(F(", STATE="));
+    // switch (state) {
+    //   case DISABLED: Serial.println(F("DISABLED")); break;
+    //   case IDLE:     Serial.println(F("IDLE"));     break;
+    //   case COOLING:  Serial.println(F("COOLING"));  break;
+    //   case HEATING:  Serial.println(F("HEATING"));  break;
+    // }
   }
 }
