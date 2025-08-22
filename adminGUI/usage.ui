@@ -3,7 +3,12 @@
  <class>UsageWindow</class>
  <widget class="QMainWindow" name="UsageWindow">
   <property name="geometry">
-   <rect><x>0</x><y>0</y><width>600</width><height>400</height></rect>
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>800</width>
+    <height>600</height>
+   </rect>
   </property>
   <property name="windowTitle">
    <string>회의실 이용 현황</string>
@@ -11,37 +16,69 @@
   <widget class="QWidget" name="centralwidget">
    <layout class="QVBoxLayout" name="verticalLayout">
     <item>
-     <widget class="QGroupBox" name="checkinGroup">
-      <property name="title">
-       <string>자동 체크인</string>
+     <widget class="QLabel" name="titleLabel">
+      <property name="font">
+       <font>
+        <pointsize>16</pointsize>
+       </font>
       </property>
-      <layout class="QVBoxLayout" name="verticalLayout_2">
-       <item><widget class="QLabel" name="checkinStatus"><property name="text"><string>체크인 상태: 대기</string></property></widget></item>
-       <item><widget class="QPushButton" name="simulateCheckinBtn"><property name="text"><string>체크인 시뮬레이션</string></property></widget></item>
-      </layout>
+      <property name="text">
+       <string>앞으로 6시간 회의실 예약 현황</string>
+      </property>
+      <property name="alignment">
+       <set>Qt::AlignCenter</set>
+      </property>
      </widget>
     </item>
     <item>
-     <widget class="QGroupBox" name="noshowGroup">
-      <property name="title">
-       <string>노쇼 처리</string>
+     <widget class="QTableWidget" name="usageTable">
+      <property name="editTriggers">
+       <set>QAbstractItemView::NoEditTriggers</set>
       </property>
-      <layout class="QVBoxLayout" name="verticalLayout_3">
-       <item><widget class="QLabel" name="noshowStatus"><property name="text"><string>노쇼 상태: 정상</string></property></widget></item>
-       <item><widget class="QPushButton" name="cancelNoshowBtn"><property name="text"><string>노쇼 취소 시뮬레이션</string></property></widget></item>
-      </layout>
-     </widget>
-    </item>
-    <item>
-     <widget class="QGroupBox" name="usageEndGroup">
-      <property name="title">
-       <string>사용 종료 감지</string>
+      <property name="selectionMode">
+       <enum>QAbstractItemView::NoSelection</enum>
       </property>
-      <layout class="QVBoxLayout" name="verticalLayout_4">
-       <item><widget class="QLabel" name="usageStatus"><property name="text"><string>사용 상태: 비활성</string></property></widget></item>
-       <item><widget class="QLabel" name="equipmentStatus"><property name="text"><string>장비 상태: OFF</string></property></widget></item>
-       <item><widget class="QPushButton" name="simulateEndBtn"><property name="text"><string>종료 시뮬레이션</string></property></widget></item>
-      </layout>
+      <property name="showGrid">
+       <bool>true</bool>
+      </property>
+      <property name="columnCount">
+       <number>7</number>
+      </property>
+      <column>
+       <property name="text">
+        <string>1시</string>
+       </property>
+      </column>
+      <column>
+       <property name="text">
+        <string>2시</string>
+       </property>
+      </column>
+      <column>
+       <property name="text">
+        <string>3시</string>
+       </property>
+      </column>
+      <column>
+       <property name="text">
+        <string>4시</string>
+       </property>
+      </column>
+      <column>
+       <property name="text">
+        <string>5시</string>
+       </property>
+      </column>
+      <column>
+       <property name="text">
+        <string>6시</string>
+       </property>
+      </column>
+      <column>
+       <property name="text">
+        <string>7시</string>
+       </property>
+      </column>
      </widget>
     </item>
    </layout>

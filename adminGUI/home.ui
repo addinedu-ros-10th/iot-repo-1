@@ -6,19 +6,24 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>600</width>
-    <height>400</height>
+    <width>400</width>
+    <height>300</height>
    </rect>
   </property>
   <property name="windowTitle">
-   <string>홈 - 회의실 관리 시스템</string>
+   <string>홈</string>
   </property>
   <widget class="QWidget" name="centralwidget">
    <layout class="QVBoxLayout" name="verticalLayout">
     <item>
      <widget class="QLabel" name="welcomeLabel">
+      <property name="font">
+       <font>
+        <pointsize>14</pointsize>
+       </font>
+      </property>
       <property name="text">
-       <string>환영합니다! (권한: [ROLE])</string>
+       <string>환영합니다! (권한: )</string>
       </property>
       <property name="alignment">
        <set>Qt::AlignCenter</set>
@@ -26,7 +31,7 @@
      </widget>
     </item>
     <item>
-     <layout class="QHBoxLayout">
+     <layout class="QVBoxLayout" name="buttonLayout">
       <item>
        <widget class="QPushButton" name="reservationBtn">
         <property name="text">
@@ -35,17 +40,6 @@
        </widget>
       </item>
       <item>
-       <widget class="QPushButton" name="usageBtn">
-        <property name="text">
-         <string>이용 현황</string>
-        </property>
-       </widget>
-      </item>
-     </layout>
-    </item>
-    <item>
-     <layout class="QHBoxLayout">
-      <item>
        <widget class="QPushButton" name="extraBtn">
         <property name="text">
          <string>부가 기능</string>
@@ -53,30 +47,20 @@
        </widget>
       </item>
       <item>
-       <widget class="QPushButton" name="integrationBtn">
+       <widget class="QPushButton" name="usageBtn">
         <property name="text">
-         <string>통합 관리</string>
+         <string>사용 현황</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="checkReservationBtn">
+        <property name="text">
+         <string>예약 인증 받기</string>
         </property>
        </widget>
       </item>
      </layout>
-    </item>
-    <item>
-     <widget class="QPushButton" name="checkReservationBtn">
-      <property name="text">
-       <string>예약 인증 받기</string>
-      </property>
-     </widget>
-    </item>
-    <item>
-     <widget class="QLabel" name="statusLabel">
-      <property name="text">
-       <string>상태: 대기</string>
-      </property>
-      <property name="alignment">
-       <set>Qt::AlignCenter</set>
-      </property>
-     </widget>
     </item>
    </layout>
   </widget>

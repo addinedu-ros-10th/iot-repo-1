@@ -7,56 +7,53 @@
     <x>0</x>
     <y>0</y>
     <width>400</width>
-    <height>300</height>
+    <height>150</height>
    </rect>
   </property>
   <property name="windowTitle">
-   <string>사용자 인증</string>
+   <string>인증</string>
   </property>
   <widget class="QWidget" name="centralwidget">
    <layout class="QVBoxLayout" name="verticalLayout">
     <item>
-     <layout class="QHBoxLayout" name="horizontalLayout">
+     <widget class="QLabel" name="statusLabel">
+      <property name="text">
+       <string>상태: 대기 중</string>
+      </property>
+      <property name="alignment">
+       <set>Qt::AlignCenter</set>
+      </property>
+     </widget>
+    </item>
+    <item>
+     <layout class="QHBoxLayout" name="roleLayout">
       <item>
-       <widget class="QLabel" name="idLabel">
+       <widget class="QLabel" name="roleLabel">
         <property name="text">
-         <string>사번/ID:</string>
+         <string>권한 선택:</string>
         </property>
        </widget>
       </item>
       <item>
-       <widget class="QLineEdit" name="idInput"/>
+       <widget class="QComboBox" name="roleComboBox">
+        <item>
+         <property name="text">
+          <string>user</string>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>admin</string>
+         </property>
+        </item>
+       </widget>
       </item>
      </layout>
     </item>
     <item>
-     <widget class="QPushButton" name="rfidBtn">
+     <widget class="QPushButton" name="loginSuccessBtn">
       <property name="text">
-       <string>RFID 인증</string>
-      </property>
-     </widget>
-    </item>
-    <item>
-     <widget class="QPushButton" name="loginBtn">
-      <property name="text">
-       <string>로그인</string>
-      </property>
-     </widget>
-    </item>
-    <item>
-     <widget class="QPushButton" name="testBtn">
-      <property name="text">
-       <string>시험용 로그인 (성공)</string>
-      </property>
-     </widget>
-    </item>
-    <item>
-     <widget class="QLabel" name="statusLabel">
-      <property name="text">
-       <string>상태: 대기</string>
-      </property>
-      <property name="alignment">
-       <set>Qt::AlignmentFlag::AlignCenter</set>
+       <string>로그인 성공 (테스트용)</string>
       </property>
      </widget>
     </item>

@@ -70,53 +70,6 @@
       <property name="title">
        <string>예약 정보</string>
       </property>
-      <layout class="QVBoxLayout" name="verticalLayout_2">
-       <item>
-        <widget class="QLabel" name="roomNameLabel">
-         <property name="text">
-          <string>회의실:</string>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <widget class="QLabel" name="startTimeLabel">
-         <property name="text">
-          <string>시작 시간:</string>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <widget class="QLabel" name="endTimeLabel">
-         <property name="text">
-          <string>종료 시간:</string>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <layout class="QHBoxLayout" name="horizontalLayout_3">
-         <item>
-          <widget class="QLabel" name="authCodeTitleLabel">
-           <property name="text">
-            <string>인증 번호:</string>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QLabel" name="authCodeDisplayLabel">
-           <property name="font">
-            <font>
-             <pointsize>16</pointsize>
-             <bold>true</bold>
-            </font>
-           </property>
-           <property name="text">
-            <string>----</string>
-           </property>
-          </widget>
-         </item>
-        </layout>
-       </item>
-      </layout>
      </widget>
     </item>
     <item>
