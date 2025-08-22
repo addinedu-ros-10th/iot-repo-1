@@ -12,7 +12,7 @@ import mysql.connector
 import serial, serial.tools.list_ports
 
 # ====== 설정 (방마다 달라질 값) ======
-ROOM_NAME = "회의실 A"      # ← 방 이름으로 필터 (reservations.room_name 있을 때 사용)
+ROOM_NAME = "회의실 B"      # ← 방 이름으로 필터 (reservations.room_name 있을 때 사용)
 ROOM_ID   = None            # ← 방 ID로 필터 (reservations.room_id 있을 때 사용). 예: 1
 PREFER_SERIAL_PORT = None   # 예: "/dev/ttyACM0" (None이면 자동 탐색)
 
@@ -147,7 +147,7 @@ class RoomKiosk(QMainWindow, from_class):
 
     # ---------- 핵심 로직 ----------
     def verify_and_start(self):
-        """인증번호 확인 → CHECKED_IN 전환 → HE 1 → 종료 타이머 세팅"""
+        """인증번호 확인 → CHECKED_IN 전환 → EN 1 → 종료 타이머 세팅"""
         code = self.le_code.text().strip()
         if not code:
             QMessageBox.warning(self, "입력", "인증번호 4자리를 입력하세요.")
@@ -230,7 +230,7 @@ class RoomKiosk(QMainWindow, from_class):
 
             # HVAC ON
             try:
-                self._send_cmd("HE 1")
+                self._send_cmd("EN 1")
             except Exception as e:
                 QMessageBox.critical(self, "HVAC 오류", f"HVAC ON 실패: {e}")
                 return
@@ -256,10 +256,10 @@ class RoomKiosk(QMainWindow, from_class):
             QMessageBox.critical(self, "오류", f"인증 처리 실패: {e}")
 
     def _auto_stop(self, reservation_id: int):
-        """예약 종료 시각 도달 → HE 0 → FINISHED"""
+        """예약 종료 시각 도달 →ENE 0 → FINISHED"""
         # HVAC OFF
         try:
-            self._send_cmd("HE 0")
+            self._send_cmd("EN 0")
         except Exception as e:
             self._set_statusbar(f"HVAC OFF 실패: {e}")
 
@@ -296,7 +296,7 @@ class RoomKiosk(QMainWindow, from_class):
         # 안전을 위해 끄고 닫기
         try:
             if self.ser:
-                try: self._send_cmd("HE 0")
+                try: self._send_cmd("EN 0")
                 except: pass
                 try: self.ser.close()
                 except: pass
