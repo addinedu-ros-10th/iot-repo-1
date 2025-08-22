@@ -96,26 +96,42 @@ void handleControl(float t, float h) {
 void processLine(String line) {
   line.trim();
   if (line.length() == 0) return;
-
   if (line.startsWith("HE")) {
     int sp = line.indexOf(' ');
     if (sp > 0) {
-      String val = line.substring(sp + 1);
-      val.trim();
+      String val = line.substring(sp + 1); val.trim();
       if (val == "1") {
         hvac_enable = true;
-        Serial.println(F("[OK] HE 1 (enable=true)"));
+        setLight(true);   // ★ HVAC enable 시 조명도 ON
+        Serial.println(F("[OK] HE 1 (hvac+light enable)"));
       } else if (val == "0") {
         hvac_enable = false;
         applyState(DISABLED);
-        Serial.println(F("[OK] HE 0 (enable=false)"));
-      } else {
-        Serial.println(F("[ERR] HE value must be 0 or 1"));
+        setLight(false);  // ★ HVAC disable 시 조명도 OFF
+        Serial.println(F("[OK] HE 0 (hvac+light disable)"));
       }
-    } else {
-      Serial.println(F("[ERR] Usage: HE 0|1"));
     }
   }
+
+  // if (line.startsWith("HE")) {
+  //   int sp = line.indexOf(' ');
+  //   if (sp > 0) {
+  //     String val = line.substring(sp + 1);
+  //     val.trim();
+  //     if (val == "1") {
+  //       hvac_enable = true;
+  //       Serial.println(F("[OK] HE 1 (enable=true)"));
+  //     } else if (val == "0") {
+  //       hvac_enable = false;
+  //       applyState(DISABLED);
+  //       Serial.println(F("[OK] HE 0 (enable=false)"));
+  //     } else {
+  //       Serial.println(F("[ERR] HE value must be 0 or 1"));
+  //     }
+  //   } else {
+  //     Serial.println(F("[ERR] Usage: HE 0|1"));
+  //   }
+  // }
   else if (line == "HR") {
     float h = dht.readHumidity();
     float t = dht.readTemperature();
