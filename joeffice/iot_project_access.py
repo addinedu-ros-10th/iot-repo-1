@@ -1,3 +1,5 @@
+# users_test -> users로 table 변경 한 것
+
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
@@ -151,7 +153,7 @@ class MyDialog(QDialog, from_class):
 
         # DB/유저 로드
         self.init_db()
-        self.load_users()  # users_test → self.users 캐시
+        self.load_users()  # users → self.users 캐시
 
         # UI 초기화
         self.current_uid_hex = None
@@ -384,7 +386,7 @@ class MyDialog(QDialog, from_class):
         """)
         # 사용자 마스터
         cur.execute("""
-            CREATE TABLE IF NOT EXISTS users_test (
+            CREATE TABLE IF NOT EXISTS users (
                 uid VARCHAR(16) PRIMARY KEY,
                 name VARCHAR(100) NOT NULL,
                 company VARCHAR(100) NOT NULL,
@@ -401,17 +403,17 @@ class MyDialog(QDialog, from_class):
 
         try:
             cur = self.db.cursor()
-            cur.execute("SELECT uid, name, company FROM users_test")
+            cur.execute("SELECT uid, name, company FROM users")
             for uid, name, company in cur.fetchall():
                 if uid:
                     self.users[uid.strip().lower()] = (name or "", company or "")
             cur.close()
         except Exception as e:
-            print("[WARN] users_test 로드 실패:", e)
+            print("[WARN] users 로드 실패:", e)
 
         # (선택) CSV → DB 백필
         if not self.users and os.path.exists(self.users_csv_path):
-            print("[INFO] users_test 비어있음 → users.csv에서 로드 후 DB 반영")
+            print("[INFO] users 비어있음 → users.csv에서 로드 후 DB 반영")
             import_rows = []
             with open(self.users_csv_path, "r", encoding="utf-8") as f:
                 reader = csv.DictReader(f)
@@ -425,7 +427,7 @@ class MyDialog(QDialog, from_class):
             if import_rows:
                 cur = self.db.cursor()
                 cur.executemany(
-                    "INSERT INTO users_test(uid, name, company) VALUES (%s, %s, %s) "
+                    "INSERT INTO users(uid, name, company) VALUES (%s, %s, %s) "
                     "ON DUPLICATE KEY UPDATE name=VALUES(name), company=VALUES(company)",
                     import_rows
                 )
@@ -591,13 +593,13 @@ class MyDialog(QDialog, from_class):
         try:
             cur = self.db.cursor()
             cur.execute(
-                "INSERT INTO users_test (uid, name, company) VALUES (%s, %s, %s) "
+                "INSERT INTO users (uid, name, company) VALUES (%s, %s, %s) "
                 "ON DUPLICATE KEY UPDATE name=VALUES(name), company=VALUES(company)",
                 (uid_hex, name.strip(), company.strip())
             )
             cur.close()
         except Exception as e:
-            QMessageBox.critical(self, "오류", f"DB users_test 저장 실패:\n{e}")
+            QMessageBox.critical(self, "오류", f"DB users 저장 실패:\n{e}")
             return
 
         self.users[uid_hex] = (name.strip(), company.strip())
@@ -683,7 +685,7 @@ class MyDialog(QDialog, from_class):
                 CASE WHEN al.uid = df.first_uid THEN 1 ELSE 0 END AS is_first_in_owner,
                 CASE WHEN al.uid = dl.last_uid  THEN 1 ELSE 0 END AS is_last_out_owner
             FROM access_log al
-            LEFT JOIN users_test u ON u.uid = al.uid
+            LEFT JOIN users u ON u.uid = al.uid
             LEFT JOIN (
                 SELECT DATE(ts) AS d, uid AS first_uid
                 FROM access_log
@@ -863,11 +865,11 @@ class MyDialog(QDialog, from_class):
     # ======== DB 업데이트 헬퍼 ========
     def _update_user_name(self, uid: str, new_name: str):
         cur = self.db.cursor()
-        cur.execute("UPDATE users_test SET name=%s WHERE uid=%s", (new_name, uid))
+        cur.execute("UPDATE users SET name=%s WHERE uid=%s", (new_name, uid))
         if cur.rowcount == 0:
             _, cur_company = self.users.get(uid, ("Unknown", "Unknown"))
             cur.execute(
-                "INSERT INTO users_test (uid, name, company) VALUES (%s, %s, %s)",
+                "INSERT INTO users (uid, name, company) VALUES (%s, %s, %s)",
                 (uid, new_name, cur_company or "Unknown")
             )
         cur.close()
@@ -890,11 +892,11 @@ class MyDialog(QDialog, from_class):
 
     def _update_user_company(self, uid: str, new_company: str):
         cur = self.db.cursor()
-        cur.execute("UPDATE users_test SET company=%s WHERE uid=%s", (new_company, uid))
+        cur.execute("UPDATE users SET company=%s WHERE uid=%s", (new_company, uid))
         if cur.rowcount == 0:
             cur_name, _ = self.users.get(uid, ("Unknown", "Unknown"))
             cur.execute(
-                "INSERT INTO users_test (uid, name, company) VALUES (%s, %s, %s)",
+                "INSERT INTO users (uid, name, company) VALUES (%s, %s, %s)",
                 (uid, cur_name or "Unknown", new_company)
             )
         cur.close()
@@ -1076,7 +1078,7 @@ class MyDialog(QDialog, from_class):
                 DATE(al.ts)                               AS d,
                 TIME(MIN(al.ts))                          AS first_in
             FROM access_log al
-            LEFT JOIN users_test u ON u.uid = al.uid
+            LEFT JOIN users u ON u.uid = al.uid
             WHERE DATE(al.ts)=%s AND al.action IN ('IN','FIRST_IN')
             GROUP BY al.uid, DATE(al.ts), u.name, u.company
             ORDER BY first_in ASC
