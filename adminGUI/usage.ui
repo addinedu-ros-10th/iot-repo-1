@@ -6,27 +6,22 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>800</width>
+    <width>1500</width>
     <height>600</height>
    </rect>
   </property>
   <property name="windowTitle">
-   <string>회의실 이용 현황</string>
+   <string>사용 현황</string>
   </property>
   <widget class="QWidget" name="centralwidget">
    <layout class="QVBoxLayout" name="verticalLayout">
     <item>
-     <widget class="QLabel" name="titleLabel">
-      <property name="font">
-       <font>
-        <pointsize>16</pointsize>
-       </font>
+     <widget class="QCalendarWidget" name="calendarWidget">
+      <property name="locale">
+       <locale language="Korean" country="SouthKorea"/>
       </property>
-      <property name="text">
-       <string>앞으로 6시간 회의실 예약 현황</string>
-      </property>
-      <property name="alignment">
-       <set>Qt::AlignCenter</set>
+      <property name="verticalHeaderFormat">
+       <enum>QCalendarWidget::NoVerticalHeader</enum>
       </property>
      </widget>
     </item>
@@ -41,49 +36,40 @@
       <property name="showGrid">
        <bool>true</bool>
       </property>
-      <property name="columnCount">
-       <number>7</number>
+      <property name="rowCount">
+       <number>0</number>
       </property>
-      <column>
-       <property name="text">
-        <string>1시</string>
-       </property>
-      </column>
-      <column>
-       <property name="text">
-        <string>2시</string>
-       </property>
-      </column>
-      <column>
-       <property name="text">
-        <string>3시</string>
-       </property>
-      </column>
-      <column>
-       <property name="text">
-        <string>4시</string>
-       </property>
-      </column>
-      <column>
-       <property name="text">
-        <string>5시</string>
-       </property>
-      </column>
-      <column>
-       <property name="text">
-        <string>6시</string>
-       </property>
-      </column>
-      <column>
-       <property name="text">
-        <string>7시</string>
-       </property>
-      </column>
+      <property name="columnCount">
+       <number>12</number>
+      </property>
+      <attribute name="horizontalHeaderVisible">
+       <bool>true</bool>
+      </attribute>
+      <attribute name="horizontalHeaderStretchLastSection">
+       <bool>true</bool>
+      </attribute>
+      <attribute name="verticalHeaderVisible">
+       <bool>true</bool>
+      </attribute>
+      <attribute name="verticalHeaderStretchLastSection">
+       <bool>false</bool>
+      </attribute>
+      <column/>
+      <column/>
+      <column/>
+      <column/>
+      <column/>
+      <column/>
+      <column/>
+      <column/>
+      <column/>
+      <column/>
+      <column/>
+      <column/>
      </widget>
     </item>
    </layout>
   </widget>
-  <widget class="QStatusBar" name="statusbar"/>
  </widget>
  <resources/>
  <connections/>

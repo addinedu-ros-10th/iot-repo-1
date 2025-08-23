@@ -57,7 +57,14 @@
         </widget>
        </item>
        <item>
-        <widget class="QCalendarWidget" name="calendarView"/>
+        <widget class="QCalendarWidget" name="calendarView">
+         <property name="locale">
+          <locale language="Korean" country="SouthKorea"/>
+         </property>
+         <property name="verticalHeaderFormat">
+          <enum>QCalendarWidget::NoVerticalHeader</enum>
+         </property>
+        </widget>
        </item>
        <item>
         <widget class="QTableWidget" name="reservationTable">
