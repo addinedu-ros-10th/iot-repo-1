@@ -1,0 +1,209 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>FacilityPanel</class>
+ <widget class="QMainWindow" name="FacilityPanel">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>1447</width>
+    <height>570</height>
+   </rect>
+  </property>
+  <property name="minimumSize">
+   <size>
+    <width>820</width>
+    <height>520</height>
+   </size>
+  </property>
+  <property name="windowTitle">
+   <string>설비 제어·모니터링</string>
+  </property>
+  <widget class="QWidget" name="centralwidget">
+   <layout class="QVBoxLayout" name="v_main">
+    <item>
+     <widget class="QGroupBox" name="grp_conn">
+      <property name="title">
+       <string>연결</string>
+      </property>
+      <layout class="QGridLayout" name="grid_conn">
+       <item row="0" column="0">
+        <widget class="QLabel" name="lbl_build_port">
+         <property name="text">
+          <string>건물 컨트롤러 포트:</string>
+         </property>
+        </widget>
+       </item>
+       <item row="0" column="1">
+        <widget class="QComboBox" name="cmb_build_port"/>
+       </item>
+       <item row="0" column="2">
+        <widget class="QLabel" name="lbl_room_port">
+         <property name="text">
+          <string>회의실 컨트롤러 포트:</string>
+         </property>
+        </widget>
+       </item>
+       <item row="0" column="3">
+        <widget class="QComboBox" name="cmb_room_port"/>
+       </item>
+       <item row="0" column="4">
+        <widget class="QPushButton" name="btn_refresh_ports">
+         <property name="text">
+          <string>포트 새로고침</string>
+         </property>
+        </widget>
+       </item>
+       <item row="0" column="5">
+        <widget class="QCheckBox" name="chk_simulate">
+         <property name="text">
+          <string>시뮬레이터 사용</string>
+         </property>
+         <property name="checked">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </item>
+    <item>
+     <layout class="QHBoxLayout" name="h_controls">
+      <item>
+       <widget class="QGroupBox" name="grp_build">
+        <property name="title">
+         <string>건물 조명·냉난방</string>
+        </property>
+        <layout class="QGridLayout" name="grid_build">
+         <item row="0" column="0">
+          <widget class="QLabel" name="lbl_build_hvac">
+           <property name="text">
+            <string>냉난방 모드</string>
+           </property>
+          </widget>
+         </item>
+         <item row="0" column="1">
+          <widget class="QComboBox" name="cmb_build_hvac_mode"/>
+         </item>
+         <item row="1" column="0">
+          <widget class="QLabel" name="lbl_build_light">
+           <property name="text">
+            <string>조명 모드</string>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="1">
+          <widget class="QComboBox" name="cmb_build_light_mode"/>
+         </item>
+         <item row="2" column="0">
+          <widget class="QPushButton" name="btn_build_refresh">
+           <property name="text">
+            <string>상태 새로고침</string>
+           </property>
+          </widget>
+         </item>
+         <item row="2" column="1">
+          <widget class="QLabel" name="lbl_build_status">
+           <property name="text">
+            <string>상태: -</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+      <item>
+       <widget class="QGroupBox" name="grp_room">
+        <property name="title">
+         <string>회의실 조명·냉난방</string>
+        </property>
+        <layout class="QGridLayout" name="grid_room">
+         <item row="0" column="0">
+          <widget class="QLabel" name="lbl_room_hvac">
+           <property name="text">
+            <string>냉난방 모드</string>
+           </property>
+          </widget>
+         </item>
+         <item row="0" column="1">
+          <widget class="QComboBox" name="cmb_room_hvac_mode"/>
+         </item>
+         <item row="1" column="0">
+          <widget class="QLabel" name="lbl_room_light">
+           <property name="text">
+            <string>조명 모드</string>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="1">
+          <widget class="QComboBox" name="cmb_room_light_mode"/>
+         </item>
+         <item row="2" column="0">
+          <widget class="QPushButton" name="btn_room_refresh">
+           <property name="text">
+            <string>상태 새로고침</string>
+           </property>
+          </widget>
+         </item>
+         <item row="2" column="1">
+          <widget class="QLabel" name="lbl_room_status">
+           <property name="text">
+            <string>상태: -</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+     </layout>
+    </item>
+    <item>
+     <widget class="QGroupBox" name="grp_monitor">
+      <property name="title">
+       <string>환경 모니터링</string>
+      </property>
+      <layout class="QVBoxLayout" name="v_mon">
+       <item>
+        <layout class="QHBoxLayout" name="h_mon_actions">
+         <item>
+          <widget class="QPushButton" name="btn_refresh_all">
+           <property name="text">
+            <string>전체 새로고침</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <spacer name="sp1">
+           <property name="orientation">
+            <enum>Qt::Horizontal</enum>
+           </property>
+           <property name="sizeHint" stdset="0">
+            <size>
+             <width>40</width>
+             <height>20</height>
+            </size>
+           </property>
+          </spacer>
+         </item>
+        </layout>
+       </item>
+       <item>
+        <widget class="QTableWidget" name="tbl_status"/>
+       </item>
+      </layout>
+     </widget>
+    </item>
+    <item>
+     <widget class="QLabel" name="lbl_msg">
+      <property name="text">
+       <string>메시지: -</string>
+      </property>
+     </widget>
+    </item>
+   </layout>
+  </widget>
+  <widget class="QStatusBar" name="statusbar"/>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
