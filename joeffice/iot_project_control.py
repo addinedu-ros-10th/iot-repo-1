@@ -64,7 +64,7 @@ class _WindowToTabAdapter(QWidget):
 class ControlHub(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("IoT Control Hub (Parking + Access)")
+        self.setWindowTitle("Joeffice Control Hub (Parking + Access)")
 
         self.tabs = QTabWidget(self)
         self.setCentralWidget(self.tabs)
