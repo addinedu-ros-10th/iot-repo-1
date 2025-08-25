@@ -111,19 +111,22 @@ class UsageWindow(QMainWindow):
         
         item = QTableWidgetItem("")
         
+
         if booked_reservation:
-            start_dt, end_dt = booked_reservation
+            # 예약된 시간대 (갈색)
             item.setText(f"{start_dt.strftime('%H:%M')} - {end_dt.strftime('%H:%M')}")
-            item.setBackground(QColor(255, 165, 0))
+            item.setBackground(QColor(160, 82, 45))
         elif time_slot < current_time:
+            # ⬅️ **수정된 부분**: 예약되지 않았던 지난 시간대 (흰색)
             item.setBackground(QColor(255, 255, 255))
             item.setText("")
         else:
+            # 예약 가능한 시간대 (녹색)
             item.setText("예약 가능")
             item.setBackground(QColor(0, 255, 0))
         
         return item
-
+        
     def closeEvent(self, event):
         self.timer.stop()
         if self.db_conn.is_connected():
