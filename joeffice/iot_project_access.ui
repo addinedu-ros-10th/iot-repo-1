@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>703</width>
-    <height>892</height>
+    <width>1028</width>
+    <height>866</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -54,10 +54,10 @@
    <widget class="QLabel" name="uidLabel">
     <property name="geometry">
      <rect>
-      <x>140</x>
+      <x>160</x>
       <y>30</y>
-      <width>191</width>
-      <height>20</height>
+      <width>281</width>
+      <height>21</height>
      </rect>
     </property>
     <property name="layoutDirection">
@@ -108,6 +108,11 @@
    <column>
     <property name="text">
      <string>퇴근시간</string>
+    </property>
+   </column>
+   <column>
+    <property name="text">
+     <string>유효기간</string>
     </property>
    </column>
   </widget>
@@ -184,6 +189,44 @@
    <property name="text">
     <string>회의실 예약현황</string>
    </property>
+  </widget>
+  <widget class="QPushButton" name="guestButton">
+   <property name="geometry">
+    <rect>
+     <x>300</x>
+     <y>130</y>
+     <width>111</width>
+     <height>41</height>
+    </rect>
+   </property>
+   <property name="text">
+    <string>방문객 정보</string>
+   </property>
+  </widget>
+  <widget class="QTableWidget" name="tableWidget_3">
+   <property name="geometry">
+    <rect>
+     <x>670</x>
+     <y>200</y>
+     <width>321</width>
+     <height>351</height>
+    </rect>
+   </property>
+   <column>
+    <property name="text">
+     <string>이름</string>
+    </property>
+   </column>
+   <column>
+    <property name="text">
+     <string>방문회사</string>
+    </property>
+   </column>
+   <column>
+    <property name="text">
+     <string>유효기간</string>
+    </property>
+   </column>
   </widget>
  </widget>
  <resources/>
