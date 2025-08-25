@@ -40,16 +40,16 @@
        </widget>
       </item>
       <item>
-       <widget class="QPushButton" name="extraBtn">
+       <widget class="QPushButton" name="usageBtn">
         <property name="text">
-         <string>부가 기능</string>
+         <string>회의실 사용 현황</string>
         </property>
        </widget>
       </item>
       <item>
-       <widget class="QPushButton" name="usageBtn">
+       <widget class="QPushButton" name="extraBtn">
         <property name="text">
-         <string>사용 현황</string>
+         <string>설비 제어 * 모니터링</string>
         </property>
        </widget>
       </item>

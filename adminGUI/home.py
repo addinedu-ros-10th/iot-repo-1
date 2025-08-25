@@ -20,21 +20,23 @@ class HomeWindow(QMainWindow):
         self.reservationBtn.clicked.connect(self.open_reservation)
         self.usageBtn.clicked.connect(self.open_usage)
         self.extraBtn.clicked.connect(self.open_extra)
-        self.checkReservationBtn.clicked.connect(self.open_reservation_check) # 예약 인증 버튼 연결
+        self.checkReservationBtn.clicked.connect(self.open_reservation_check)
 
         self.toggle_buttons()
 
     def toggle_buttons(self):
-        self.reservationBtn.setEnabled(True)
-        self.usageBtn.setEnabled(True)
-        self.extraBtn.setEnabled(self.user_role == "admin")  # admin만 부가 기능 활성화
-        self.checkReservationBtn.setEnabled(True)  # 예약 인증은 모든 사용자가 가능
+        self.reservationBtn.setVisible(True)
+        self.usageBtn.setVisible(True)
+        self.extraBtn.setVisible(False)
+        self.checkReservationBtn.setVisible(True)
 
-        # 예약 관리 버튼 (reservationBtn)은 admin만 활성화, user는 비활성화
-        if self.user_role == "user":
-            self.reservationBtn.setEnabled(False)
-        elif self.user_role == "admin":
-            self.reservationBtn.setEnabled(True)
+        # 권한에 따라 버튼 숨김/표시
+        if self.user_role == "admin":
+            self.reservationBtn.setVisible(True)
+            self.extraBtn.setVisible(True)
+        elif self.user_role == "user":
+            self.reservationBtn.setVisible(False)
+            self.extraBtn.setVisible(False)
 
     def open_reservation(self):
         self.reservation_window = ReservationWindow(self.user_role)

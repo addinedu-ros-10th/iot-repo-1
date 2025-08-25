@@ -1,3 +1,5 @@
+// LCD 디스플레이 모듈 추가까지
+
 // 회의실 냉난방시스템 + 조명 (회의실 전용 프로토콜)
 //   EN 1  -> 인증 성공(체크인) 시 제어 허용 + 표시LED ON
 //   EN 0  -> 관리자/수동 OFF 시 제어 차단 + 표시LED OFF
@@ -11,6 +13,10 @@
 #define DHTPIN 2
 #define DHTTYPE DHT11
 DHT dht(DHTPIN, DHTTYPE);
+
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+LiquidCrystal_I2C lcd(0x27, 16, 2);
 
 // 상태 표시 LED: R=히터, G=쾌적, B=에어컨
 const int R_LED = 3, G_LED = 5, B_LED = 6;
@@ -134,6 +140,15 @@ void setup(){
   pinMode(HVAC_POWER_LED,OUTPUT);
   digitalWrite(HVAC_POWER_LED,LOW);
 
+  // LCD
+  lcd.init();
+  lcd.backlight();
+  lcd.clear();
+  lcd.setCursor(0,0);
+  lcd.print("Room HVAC Ready");
+  lcd.setCursor(0,1);
+  lcd.print("Waiting...");
+
   applyState(DISABLED);
   Serial.println(F("Room HVAC ready. Commands: 'EN 1', 'EN 0', 'HR'"));
   Serial.println(F("Cooling: t>=COOL_ON OR h>=HUM_ON; Off when t<=COOL_OFF AND h<=HUM_OFF"));
@@ -159,6 +174,18 @@ void loop(){
     float h=dht.readHumidity(), t=dht.readTemperature();
     if(isnan(h)||isnan(t)){ Serial.println(F("Failed to read from DHT !")); return; }
     handleControl(t, h);
+
+    // ======================= LCD 표시 =====================
+    lcd.setCursor(0,0); // 1행
+    char line1[17];
+    snprintf(line1, sizeof(line1), "Temp:%5.1fc      ", t);
+    lcd.print(line1);
+
+    lcd.setCursor(0,1); // 2행
+    char line2[17];
+    snprintf(line2, sizeof(line2). "Hum :%5.1f%%      ", h);
+    lcd.print(line2);
+    // ============================================
 
     // 상태 로그(원하면 주석처리)
     Serial.print(F("T:")); Serial.print(t,1); Serial.print(F("C "));
