@@ -10,7 +10,9 @@ import serial
 import serial.tools.list_ports as lp
 from datetime import datetime, date, timedelta
 from zoneinfo import ZoneInfo
+import re
 
+BUILDING_ID = 1
 # --- MySQL 커넥터 로드 ---
 try:
     import mysql.connector
@@ -238,12 +240,25 @@ class MyDialog(QDialog, from_class):
         else:
             self.uidLabel.setText("오프라인 모드: 카드 대주세요 (RFID 미연결)")
 
+
         # HVAC 포트(별도 포트 자동 탐색)
         self.hvac_conn = self.try_open_hvac_serial(exclude=self.conn.port if self.conn else None)
         if self.hvac_conn:
             print(f"[SERIAL] HVAC connected: {self.hvac_conn.port}")
+
+            # ⬇️ HR 수신 스레드 시작
+            self.hvac_recv = HvacReader(self.hvac_conn, parent=self)
+            self.hvac_recv.line_rx.connect(self.on_hvac_line)  # 새 슬롯 추가 (아래 4번)
+            self.hvac_recv.start()
+
+            # ⬇️ 5초마다 HR 질의
+            self._hvac_poll = QTimer(self)
+            self._hvac_poll.setInterval(5000)
+            self._hvac_poll.timeout.connect(self.send_hr)
+            self._hvac_poll.start()
         else:
             print("[SERIAL] HVAC not connected (off-line mode)")
+
 
         # DB/유저 로드
         self.init_db()
@@ -285,6 +300,31 @@ class MyDialog(QDialog, from_class):
         btn = getattr(self, "mtrcheckButton", None)
         if btn:
             btn.clicked.connect(self.open_booked_reservations)
+
+
+    def _upsert_building_status(self, t, h, hvac_on, light_on):
+        if not (hasattr(self, "db") and self.db and self.db.is_connected()):
+            return
+        try:
+            cur = self.db.cursor()
+            cur.execute(
+                """
+                INSERT INTO building_system_status
+                    (building_id, temp_c, hum_pct, light_on, hvac_on)
+                VALUES (%s, %s, %s, %s, %s)
+                ON DUPLICATE KEY UPDATE
+                  temp_c=VALUES(temp_c),
+                  hum_pct=VALUES(hum_pct),
+                  light_on=VALUES(light_on),
+                  hvac_on=VALUES(hvac_on)
+                """,
+                (BUILDING_ID, t, h, light_on, hvac_on)
+            )
+            cur.close()
+        except Exception as e:
+            print("[DB][WARN] building_system_status upsert fail:", e)
+
+
 
     # ---------------- 시리얼 도우미 ----------------
     def try_open_serial(self, port="/dev/ttyACM0", baudrate=9600):
@@ -357,6 +397,53 @@ class MyDialog(QDialog, from_class):
     def send_hr(self):
         self._serial_send_line("HR")
 
+
+
+    # ===== HVAC HR 수신 처리 (클래스 레벨) =====
+    @pyqtSlot(str)
+    def on_hvac_line(self, line: str):
+        """
+        아두이노 HR/상태 라인을 파싱해서 building_system_status에 업서트.
+        지원 포맷:
+        1) TEMP:25.3C HUM:41.0% ENABLE:1 STATE:... LIGHT:ON MODE:A
+        2) T:25.3C H:41.0% EN=1 STATE=... LIGHT=ON MODE=A
+        """
+        parsed = self._parse_hvac_line(line)
+        if not parsed:
+            return
+        t, h, hvac_on, light_on = parsed
+        self._upsert_building_status(t, h, hvac_on, light_on)
+
+    def _parse_hvac_line(self, s: str):
+        """
+        Returns: (temp_c:float, hum_pct:float, hvac_on:int(0/1), light_on:int(0/1)) or None
+        """
+        try:
+            # 패턴 1: TEMP/HUM/ENABLE/LIGHT
+            m = re.search(
+                r"TEMP:([-\d.]+)C\s+HUM:([-\d.]+)%.*?ENABLE[:=](\d).*?LIGHT[:=](ON|OFF)",
+                s, re.IGNORECASE
+            )
+            if not m:
+                # 패턴 2: T/H/EN/LIGHT
+                m = re.search(
+                    r"\bT[:=]([-\d.]+)C\b.*?\bH[:=]([-\d.]+)%\b.*?\bEN[:=](\d)\b.*?\bLIGHT[:=](ON|OFF)\b",
+                    s, re.IGNORECASE
+                )
+            if not m:
+                return None
+
+            t = float(m.group(1))
+            h = float(m.group(2))
+            hvac_on = 1 if m.group(3) == "1" else 0
+            light_on = 1 if m.group(4).upper() == "ON" else 0
+            return t, h, hvac_on, light_on
+        except Exception:
+            return None
+
+
+    
+
     # ---------------- 공통 유틸 ----------------
     def _td_to_hms(self, val) -> str:
         if val is None:
@@ -408,7 +495,54 @@ class MyDialog(QDialog, from_class):
         return action
 
     # ---------------- MySQL 초기화 ----------------
+    # def init_db(self):
+    #     self.db = mysql.connector.connect(
+    #         host="database-1.c1kkeqig4j9x.ap-northeast-2.rds.amazonaws.com",
+    #         port=3306,
+    #         user="joeffice_user",
+    #         password="12345678",
+    #         database="joeffice",
+    #         autocommit=True,
+    #     )
+    #     cur = self.db.cursor()
+    #     cur.execute("""
+    #         CREATE TABLE IF NOT EXISTS access_log (
+    #             id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    #             uid VARCHAR(16) NOT NULL,
+    #             name VARCHAR(100),
+    #             company VARCHAR(100),
+    #             ts DATETIME NOT NULL,
+    #             action ENUM('IN','OUT','FIRST_IN','LAST_OUT') NOT NULL,
+    #             INDEX idx_uid_date (uid, ts)
+    #         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    #     """)
+    #     cur.execute("""
+    #         CREATE TABLE IF NOT EXISTS users (
+    #             uid VARCHAR(16) PRIMARY KEY,
+    #             name VARCHAR(100) NOT NULL,
+    #             company VARCHAR(100) NOT NULL,
+    #             created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    #             updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    #         ) ENGINE=InnoDB DEFAULT
+    #         CREATE TABLE IF NOT EXISTS building_system_status (
+    #             building_id INT PRIMARY KEY,
+    #             temp_c      DECIMAL(4,1) NULL,
+    #             hum_pct     DECIMAL(4,1) NULL,
+    #             light_on    TINYINT(1) NOT NULL DEFAULT 0,
+    #             hvac_on     TINYINT(1) NOT NULL DEFAULT 0,
+    #             updated_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    #                                   ON UPDATE CURRENT_TIMESTAMP
+    #         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    #     """)
+    #     # 초기행 준비(덮어쓰기용 PK 보장)
+    #     cur.execute(
+    #         "INSERT INTO building_system_status (building_id) VALUES (%s) "
+    #         "ON DUPLICATE KEY UPDATE building_id=VALUES(building_id)",
+    #         (BUILDING_ID,)
+    #     )
+
     def init_db(self):
+        # 1) DB 연결 (cext 비활성화 + 타임아웃 + 재연결)
         self.db = mysql.connector.connect(
             host="database-1.c1kkeqig4j9x.ap-northeast-2.rds.amazonaws.com",
             port=3306,
@@ -416,29 +550,59 @@ class MyDialog(QDialog, from_class):
             password="12345678",
             database="joeffice",
             autocommit=True,
+            use_pure=True,          # ← cext 끄기: 에러 메시지 명확 + 안정
+            connection_timeout=10,  # ← 네트워크 타임아웃
         )
+        if not self.db.is_connected():
+            self.db.reconnect(attempts=3, delay=2)
+
+        # 2) DDL/초기행: 한 커서에서 처리하고 마지막에 닫기
         cur = self.db.cursor()
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS access_log (
-                id BIGINT AUTO_INCREMENT PRIMARY KEY,
-                uid VARCHAR(16) NOT NULL,
-                name VARCHAR(100),
-                company VARCHAR(100),
-                ts DATETIME NOT NULL,
-                action ENUM('IN','OUT','FIRST_IN','LAST_OUT') NOT NULL,
-                INDEX idx_uid_date (uid, ts)
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-        """)
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS users (
-                uid VARCHAR(16) PRIMARY KEY,
-                name VARCHAR(100) NOT NULL,
-                company VARCHAR(100) NOT NULL,
-                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-        """)
-        cur.close()
+        try:
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS access_log (
+                    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                    uid VARCHAR(16) NOT NULL,
+                    name VARCHAR(100),
+                    company VARCHAR(100),
+                    ts DATETIME NOT NULL,
+                    action ENUM('IN','OUT','FIRST_IN','LAST_OUT') NOT NULL,
+                    INDEX idx_uid_date (uid, ts)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            """)
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS users (
+                    uid VARCHAR(16) PRIMARY KEY,
+                    name VARCHAR(100) NOT NULL,
+                    company VARCHAR(100) NOT NULL,
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                        ON UPDATE CURRENT_TIMESTAMP
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            """)
+
+            # === 빌딩 시스템 스냅샷 테이블 ===
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS building_system_status (
+                    building_id INT PRIMARY KEY,
+                    temp_c      DECIMAL(4,1) NULL,
+                    hum_pct     DECIMAL(4,1) NULL,
+                    light_on    TINYINT(1) NOT NULL DEFAULT 0,
+                    hvac_on     TINYINT(1) NOT NULL DEFAULT 0,
+                    updated_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+                                            ON UPDATE CURRENT_TIMESTAMP
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            """)
+            # 초기행(UPSERT) – 덮어쓰기용 PK 보장
+            cur.execute(
+                "INSERT INTO building_system_status (building_id) VALUES (%s) "
+                "ON DUPLICATE KEY UPDATE building_id=VALUES(building_id)",
+                (BUILDING_ID,)
+            )
+        finally:
+            cur.close()
+
+
 
     # ---------------- 사용자 로드 ----------------
     def load_users(self):
@@ -1185,6 +1349,13 @@ class MyDialog(QDialog, from_class):
                 self.db.close()
         except Exception:
             pass
+
+        try:
+            if hasattr(self, "_hvac_poll") and self._hvac_poll:
+                self._hvac_poll.stop()
+        except Exception:
+            pass
+
 
         event.accept()
 
