@@ -1,24 +1,21 @@
-// LCD 추가 + AUTO 모드 지원 버전
 // 건물 전체 냉난방시스템 + 조명시스템 (LCD 표시 포함)
 //
 // Serial Commands:
-//   HE A -> AUTO (enable HVAC auto control; light auto = state!=DISABLED)
-//   HE 1 -> FIRST IN 이후 (enable HVAC & light ON)
-//   HE 0 -> LAST OUT 이후  (disable HVAC & light OFF)
+//   HE 1 -> FIRST IN 이후 (HVAC 허용 + LIGHT ON)
+//   HE 0 -> LAST OUT 이후  (HVAC 차단 + LIGHT OFF)
 //   HR   -> 상태 요청 (온습도, ENABLE, STATE, LIGHT, MODE)
 //
-// HVAC 로직은 온습도 히스테리시스로 자동 결정됩니다.
 
 #include "DHT.h"
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
 #include <string.h>
+#include <math.h>
 
 #define DHTPIN 2
 #define DHTTYPE DHT11
 DHT dht(DHTPIN, DHTTYPE);
 
-// LCD: I2C 주소 0x27(일반적). 보드에 따라 0x3F일 수도 있음.
 LiquidCrystal_I2C lcd(0x27, 16, 2);
 
 // HVAC 상태 LED: R=HEATING, G=IDLE, B=COOLING
@@ -26,10 +23,10 @@ const int R_LED = 3;
 const int G_LED = 5;
 const int B_LED = 6;
 
-// 조명 릴레이/LED 핀
+// 조명 LED 핀
 const int LIGHT_PIN = 7;
 
-// 히스테리시스 임계값
+// 임계값
 float COOL_ON  = 26.0;
 float COOL_OFF = 25.5;
 float HUM_ON   = 70.0;
@@ -40,13 +37,13 @@ float HEAT_OFF = 15.5;
 enum HvacState { DISABLED, IDLE, COOLING, HEATING };
 HvacState state = DISABLED;
 
-enum Mode3 { MODE_AUTO, MODE_ON, MODE_OFF };
-Mode3 hvac_mode = MODE_OFF;    // 기본: OFF
-bool  light_enable = false;    // 현재 물리 조명 상태
+enum Mode2 { MODE_ON, MODE_OFF };
+Mode2 hvac_mode = MODE_OFF;    // 기본: OFF
+bool  light_enable = false;    // 현재 조명 상태
 
 String rxLine;
 
-// ---------- 유틸 ----------
+
 void setLeds(bool r, bool g, bool b) {
   digitalWrite(R_LED, r ? HIGH : LOW);
   digitalWrite(G_LED, g ? HIGH : LOW);
@@ -55,21 +52,21 @@ void setLeds(bool r, bool g, bool b) {
 
 void setLight(bool on) {
   light_enable = on;
-  // 릴레이가 LOW=ON 타입이면 아래 한 줄 반대로 바꾸세요.
   digitalWrite(LIGHT_PIN, on ? HIGH : LOW);
 }
 
-const char* modeToChar(Mode3 m){
-  switch(m){
-    case MODE_AUTO: return "A";
-    case MODE_ON:   return "1";
-    case MODE_OFF:  return "0";
+const char* modeToChar(Mode2 m){
+  switch(m)
+  {
+    case MODE_ON:  return "1";
+    case MODE_OFF: return "0";
   }
   return "?";
 }
 
 const char* hvacLabel(HvacState s) {
-  switch (s) {
+  switch (s) 
+  {
     case DISABLED: return "DISA";
     case IDLE:     return "IDLE";
     case COOLING:  return "COOL";
@@ -80,7 +77,8 @@ const char* hvacLabel(HvacState s) {
 
 void applyState(HvacState s) {
   state = s;
-  switch (s) {
+  switch (s) 
+  {
     case DISABLED: setLeds(false, false, false); break;
     case IDLE:     setLeds(false, true,  false); break;
     case COOLING:  setLeds(false, false, true ); break;
@@ -90,23 +88,30 @@ void applyState(HvacState s) {
 
 // ---------- 제어 로직 ----------
 void handleHvac(float t, float h) {
-  if (hvac_mode == MODE_OFF) { applyState(DISABLED); return; }
+  if (hvac_mode == MODE_OFF) 
+  { 
+    applyState(DISABLED); return; 
+  }
 
   bool wantCoolOn  = (t >= COOL_ON) || (h >= HUM_ON);
   bool wantCoolOff = (t <= COOL_OFF) && (h <= HUM_OFF);
   bool wantHeatOn  = (t <= HEAT_ON);
   bool wantHeatOff = (t >= HEAT_OFF);
 
-  switch (state) {
+  switch (state) 
+  {
     case COOLING:
       if (wantCoolOff) applyState(IDLE);
       else             applyState(COOLING);
       break;
     case HEATING:
-      if (wantHeatOff) {
+      if (wantHeatOff) 
+      {
         if (wantCoolOn) applyState(COOLING);
         else            applyState(IDLE);
-      } else {
+      } 
+      else 
+      {
         applyState(HEATING);
       }
       break;
@@ -119,72 +124,51 @@ void handleHvac(float t, float h) {
   }
 }
 
-void handleLightAuto(){
-  // AUTO 규칙: state가 DISABLED가 아니면 ON, 아니면 OFF
-  bool on = (state != DISABLED);
-  setLight(on);
-}
-
-// // ---------- LCD ----------
-// void drawLCD(float t, float h) {
-//   // 1행: "T:25.3C H:55%"
-//   char line1[17];
-//   snprintf(line1, sizeof(line1), "T:%5.1fC H:%-3.0f%%", t, h); // 16자 맞춤
-//   lcd.setCursor(0,0); lcd.print(line1);
-//   int len1 = strlen(line1); for (int i=len1; i<16; ++i) lcd.print(' ');
-
-//   // 2행: "HVAC:COOL L:ON"
-//   char line2[17];
-//   snprintf(line2, sizeof(line2), "HVAC:%-4s L:%s", hvacLabel(state), light_enable ? "ON " : "OFF");
-//   lcd.setCursor(0,1); lcd.print(line2);
-//   int len2 = strlen(line2); for (int i=len2; i<16; ++i) lcd.print(' ');
-// }
-
 // ---------- LCD ----------
 void drawLCD(float t, float h) {
   // 1행: T:25.3°C H:55%
   lcd.setCursor(0, 0);
   lcd.print("T:");
-  if (!isnan(t)) {
-    lcd.print(t, 1);          // 소수 1자리
-    lcd.write((uint8_t)223);  // '°' 기호(HD44780에서 223)
+  if (!isnan(t)) 
+  {
+    lcd.print(t, 1);
+    lcd.write((uint8_t)223);  // °
     lcd.print("C ");
-  } else {
+  } 
+  else 
+  {
     lcd.print("--.-"); lcd.write((uint8_t)223); lcd.print("C ");
   }
 
   lcd.print("H:");
-  if (!isnan(h)) {
-    lcd.print((int)round(h)); // 정수로 깔끔히
+  if (!isnan(h)) 
+  {
+    lcd.print((int)round(h));
     lcd.print("%");
-  } else {
+  } 
+  else 
+  {
     lcd.print("---%");
   }
+  lcd.print("   "); // 잔상 지움
 
-  // 남은 칸 공백으로 지워 잔상 방지
-  int col = 16 - (0); // 간단히 끝에 공백 몇 개
-  lcd.print("   ");
-
-  // 2행: HVAC:COOL L:ON  (총 16칸 맞춤)
+  // 2행: HVAC:COOL L:ON
   lcd.setCursor(0, 1);
   lcd.print("HVAC:");
-  lcd.print(hvacLabel(state)); // "DISA/IDLE/COOL/HEAT" (4글자)
+  lcd.print(hvacLabel(state));
   lcd.print(" L:");
   lcd.print(light_enable ? "ON " : "OFF");
-  // 남은 칸 지우기
   lcd.print("   ");
 }
-
-
-
 
 // ---------- 시리얼 출력 ----------
 void printStatus(float t, float h) {
   Serial.print(F("TEMP:")); Serial.print(t, 1);
   Serial.print(F("C HUM:")); Serial.print(h, 1);
-  Serial.print(F("% ENABLE:")); Serial.print((hvac_mode != MODE_OFF) ? "1" : "0");
+  Serial.print(F("% ENABLE:")); Serial.print((hvac_mode == MODE_ON) ? "1" : "0");
   Serial.print(F(" STATE:"));
-  switch (state) {
+  switch (state) 
+  {
     case DISABLED: Serial.print(F("DISABLED")); break;
     case IDLE:     Serial.print(F("IDLE"));     break;
     case COOLING:  Serial.print(F("COOLING"));  break;
@@ -199,41 +183,45 @@ void processLine(String line) {
   line.trim();
   if (line.length() == 0) return;
 
-  if (line.startsWith("HE")) {
+  if (line.startsWith("HE")) 
+  {
     int sp = line.indexOf(' ');
-    if (sp > 0) {
+    if (sp > 0) 
+    {
       String val = line.substring(sp + 1); val.trim();
-      if (val == "A" || val == "a") {
-        hvac_mode = MODE_AUTO;
-        // AUTO: HVAC 허용 + 조명 자동
-        Serial.println(F("[OK] HE A (HVAC=AUTO, light=auto)"));
-      } else if (val == "1") {
+      if (val == "1") 
+      {
         hvac_mode = MODE_ON;
-        // ON: HVAC 허용 + 조명 ON
-        setLight(true);
+        setLight(true);                // 조명 ON
         Serial.println(F("[OK] HE 1 (HVAC=ON, light=ON)"));
-      } else if (val == "0") {
+      } 
+      else if (val == "0") 
+      {
         hvac_mode = MODE_OFF;
-        // OFF: HVAC 차단 + 조명 OFF
-        applyState(DISABLED);
-        setLight(false);
+        applyState(DISABLED);          // HVAC 차단
+        setLight(false);               // 조명 OFF
         Serial.println(F("[OK] HE 0 (HVAC=OFF, light=OFF)"));
-      } else {
-        Serial.println(F("[ERR] HE value must be A|1|0"));
+      } 
+      else 
+      {
+        Serial.println(F("[ERR] HE value must be 1|0"));
       }
-    } else {
-      Serial.println(F("[ERR] Usage: HE A|1|0"));
+    } 
+    else 
+    {
+      Serial.println(F("[ERR] Usage: HE 1|0"));
     }
   }
-  else if (line == "HR") {
+  else if (line == "HR") 
+  {
     float h = dht.readHumidity();
     float t = dht.readTemperature();
     if (isnan(h) || isnan(t)) { Serial.println(F("[ERR] DHT read failed")); return; }
     printStatus(t, h);
-    // HR 요청 시 LCD도 최신값으로 갱신
     drawLCD(t, h);
   }
-  else {
+  else 
+  {
     Serial.print(F("[ERR] Unknown cmd: ")); Serial.println(line);
   }
 }
@@ -248,56 +236,53 @@ void setup() {
   pinMode(B_LED, OUTPUT);
   pinMode(LIGHT_PIN, OUTPUT);
 
-  // LCD 초기화
   lcd.init();
   lcd.backlight();
   lcd.clear();
   lcd.setCursor(0,0); lcd.print("HVAC+LIGHT Ready");
-  lcd.setCursor(0,1); lcd.print("Waiting...");
+  lcd.setCursor(0,1); lcd.print("Use HE 1/0, HR");
 
   applyState(DISABLED);
   hvac_mode = MODE_OFF;
   setLight(false);
 
-  Serial.println(F("HVAC+LIGHT ready. Cmd: 'HE A|1|0', 'HR'"));
+  Serial.println(F("HVAC+LIGHT ready. Cmd: 'HE 1|0', 'HR'"));
 }
 
 void loop() {
   // 1) 직렬 명령 처리
-  while (Serial.available()) {
+  while (Serial.available()) 
+  {
     char c = (char)Serial.read();
-    if (c == '\n' || c == '\r') {
+    if (c == '\n' || c == '\r') 
+    {
       if (rxLine.length() > 0) { processLine(rxLine); rxLine = ""; }
-    } else {
+    } 
+    else 
+    {
       rxLine += c;
       if (rxLine.length() > 64) rxLine = "";
     }
   }
 
-  // 2) 주기 센서 읽기 + 제어 + LCD 표시
+  // 2) 2초마다 센서 읽고 HVAC 상태 결정 (ON일 때만 동작)
   static unsigned long lastMs = 0;
   unsigned long now = millis();
-  if (now - lastMs >= 2000) {  // 2초 주기
+  if (now - lastMs >= 2000) 
+  {
     lastMs = now;
 
     float h = dht.readHumidity();
     float t = dht.readTemperature();
-    if (isnan(h) || isnan(t)) {
+    if (isnan(h) || isnan(t)) 
+    {
       Serial.println(F("Failed to read from DHT sensor !"));
       return;
     }
 
-    // HVAC 제어
-    handleHvac(t, h);
+    handleHvac(t, h);  // MODE_OFF면 내부에서 DISABLED로 정리
 
-    // LIGHT 제어
-    if (hvac_mode == MODE_AUTO) {
-      handleLightAuto();
-    }
-    // MODE_ON은 setLight(true)가 명령 시점에 이미 적용됨
-    // MODE_OFF는 setLight(false) 적용됨
-
-    // LCD 갱신
+    // 조명은 명령 시점에 이미 ON/OFF 확정 (HE 1/0)
     drawLCD(t, h);
   }
 }

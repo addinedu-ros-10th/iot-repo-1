@@ -288,7 +288,7 @@ class RoomKiosk(QMainWindow, from_class):
                 cur = self.db.cursor()
                 cur.execute("""
                     UPDATE reservations
-                    SET reservation_status='FINISHED'
+                    SET reservation_status='CHECKED_OUT'
                     WHERE `id`=%s AND reservation_status='CHECKED_IN'
                 """, (self.active_resv["id"],))
                 self.db.commit()
@@ -325,7 +325,7 @@ class RoomKiosk(QMainWindow, from_class):
                 cur = self.db.cursor()
                 cur.execute("""
                     UPDATE reservations
-                    SET reservation_status='FINISHED'
+                    SET reservation_status='CHECKED_OUT'
                     WHERE `id`=%s AND reservation_status='CHECKED_IN'
                 """, (reservation_id,))
                 self.db.commit()

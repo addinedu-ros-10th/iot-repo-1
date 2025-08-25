@@ -42,7 +42,7 @@
       <item>
        <widget class="QPushButton" name="extraBtn">
         <property name="text">
-         <string>설비 제어 * 모니터링</string>
+         <string>모니터링</string>
         </property>
        </widget>
       </item>
