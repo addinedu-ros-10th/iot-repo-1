@@ -40,13 +40,6 @@
        </widget>
       </item>
       <item>
-       <widget class="QPushButton" name="usageBtn">
-        <property name="text">
-         <string>회의실 사용 현황</string>
-        </property>
-       </widget>
-      </item>
-      <item>
        <widget class="QPushButton" name="extraBtn">
         <property name="text">
          <string>설비 제어 * 모니터링</string>
@@ -57,6 +50,13 @@
        <widget class="QPushButton" name="checkReservationBtn">
         <property name="text">
          <string>예약 인증 받기</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="usageBtn">
+        <property name="text">
+         <string>회의실 사용 현황</string>
         </property>
        </widget>
       </item>
