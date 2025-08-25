@@ -8,6 +8,7 @@ from PyQt6.uic import loadUi
 from PyQt6.QtCore import QTimer, QDate, QTime, QLocale
 import mysql.connector
 from datetime import datetime, timedelta
+import random
 
 class ReservationWindow(QMainWindow):
     def __init__(self, user_role, current_user_id="bombtol"):
@@ -160,31 +161,28 @@ class ReservationWindow(QMainWindow):
                 cursor = self.db_conn.cursor()
                 selected_date = self.calendarView.selectedDate().toPyDate()
                 
+                # ⬅️ **수정된 부분**: 시간대 변환(CONVERT_TZ)을 제거합니다.
                 cursor.execute("""
                     SELECT uid, name, company, room_name, start_time, end_time, auth_code, reservation_status
-                    FROM reservations WHERE DATE(CONVERT_TZ(start_time, 'UTC', 'Asia/Seoul')) = %s
+                    FROM reservations WHERE DATE(start_time) = %s
                 """, (selected_date,))
                 reservations = cursor.fetchall()
                 
-                self.reservationTable.setColumnCount(8) # 양보 요청 컬럼 제거
+                self.reservationTable.setColumnCount(8)
                 self.reservationTable.setHorizontalHeaderLabels([
                     "UID", "이름", "회사", "회의실명", "시작 시간", "종료 시간",
                     "인증 번호", "상태"
                 ])
                 self.reservationTable.setRowCount(len(reservations))
                 
-                kst_offset = timedelta(hours=9)
-                
-                for row, (uid, name, company, room_name, start_dt_utc, end_dt_utc, auth_code, status) in enumerate(reservations):
-                    start_dt_kst = start_dt_utc + kst_offset
-                    end_dt_kst = end_dt_utc + kst_offset
-                    
+                # ⬅️ **수정된 부분**: 시간대 변환 로직을 제거하고 DB 데이터를 그대로 사용합니다.
+                for row, (uid, name, company, room_name, start_dt, end_dt, auth_code, status) in enumerate(reservations):
                     self.reservationTable.setItem(row, 0, QTableWidgetItem(uid))
                     self.reservationTable.setItem(row, 1, QTableWidgetItem(name))
                     self.reservationTable.setItem(row, 2, QTableWidgetItem(company))
                     self.reservationTable.setItem(row, 3, QTableWidgetItem(room_name))
-                    self.reservationTable.setItem(row, 4, QTableWidgetItem(start_dt_kst.strftime('%Y-%m-%d %H:%M:%S')))
-                    self.reservationTable.setItem(row, 5, QTableWidgetItem(end_dt_kst.strftime('%Y-%m-%d %H:%M:%S')))
+                    self.reservationTable.setItem(row, 4, QTableWidgetItem(start_dt.strftime('%Y-%m-%d %H:%M:%S')))
+                    self.reservationTable.setItem(row, 5, QTableWidgetItem(end_dt.strftime('%Y-%m-%d %H:%M:%S')))
                     self.reservationTable.setItem(row, 6, QTableWidgetItem(auth_code or "N/A"))
                     self.reservationTable.setItem(row, 7, QTableWidgetItem(status))
 
@@ -201,22 +199,20 @@ class ReservationWindow(QMainWindow):
         try:
             selected_room_name = self.roomComboBox.currentText()
             
-            start_datetime_naive = datetime.combine(self.startingDateInput.date().toPyDate(), self.startingTimeInput.time().toPyTime())
-            end_datetime_naive = datetime.combine(self.endingDateInput.date().toPyDate(), self.endingTimeInput.time().toPyTime())
+            # ⬅️ **수정된 부분**: UI의 시간을 변환 없이 그대로 사용합니다.
+            start_datetime = datetime.combine(self.startingDateInput.date().toPyDate(), self.startingTimeInput.time().toPyTime())
+            end_datetime = datetime.combine(self.endingDateInput.date().toPyDate(), self.endingTimeInput.time().toPyTime())
 
-            kst_offset = timedelta(hours=9)
-            start_datetime_utc = start_datetime_naive - kst_offset
-            end_datetime_utc = end_datetime_naive - kst_offset
-
-            if end_datetime_utc <= start_datetime_utc:
+            if end_datetime <= start_datetime:
                 QMessageBox.warning(self, "시간 오류", "종료 시간이 시작 시간보다 늦어야 합니다.")
                 return
 
             cursor = self.db_conn.cursor()
+            # ⬅️ **수정된 부분**: 시간대 변환 없이 중복 예약을 확인합니다.
             cursor.execute("""
                 SELECT COUNT(*) FROM reservations WHERE room_name = %s AND NOT (end_time <= %s OR start_time >= %s)
                 AND reservation_status IN ('BOOKED', 'CHECKED_IN')
-            """, (selected_room_name, start_datetime_utc, end_datetime_utc))
+            """, (selected_room_name, start_datetime, end_datetime))
             
             if cursor.fetchone()[0] > 0:
                 QMessageBox.warning(self, "중복 예약", "선택한 시간대에 이미 예약이 있습니다.")
@@ -236,10 +232,11 @@ class ReservationWindow(QMainWindow):
             name, company = user_info['name'], user_info['company']
             auth_code = str(random.randint(1000, 9999))
             
+            # ⬅️ **수정된 부분**: 시간대 변환 없이 예약을 생성합니다.
             cursor.execute("""
                 INSERT INTO reservations (uid, name, company, room_name, start_time, end_time, auth_code, reservation_status)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, 'BOOKED')
-            """, (uid, name, company, selected_room_name, start_datetime_utc, end_datetime_utc, auth_code))
+            """, (uid, name, company, selected_room_name, start_datetime, end_datetime, auth_code))
             
             self.db_conn.commit()
             QMessageBox.information(self, "예약 성공", f"예약이 완료되었습니다.\n인증 번호: {auth_code}")
@@ -255,10 +252,10 @@ class ReservationWindow(QMainWindow):
             return
 
         res_uid = self.reservationTable.item(selected_row, 0).text()
-        start_time_str_kst = self.reservationTable.item(selected_row, 4).text()
+        start_time_str = self.reservationTable.item(selected_row, 4).text()
         
-        start_time_naive_kst = datetime.strptime(start_time_str_kst, '%Y-%m-%d %H:%M:%S')
-        start_time_utc = start_time_naive_kst - timedelta(hours=9)
+        # ⬅️ **수정된 부분**: 시간대 변환 없이 문자열을 datetime 객체로 변환합니다.
+        start_time = datetime.strptime(start_time_str, '%Y-%m-%d %H:%M:%S')
 
         if self.user_role == "admin" or res_uid == self.current_user_id:
             reply = QMessageBox.question(self, "예약 취소", "선택한 예약을 취소하시겠습니까?",
@@ -266,10 +263,11 @@ class ReservationWindow(QMainWindow):
             if reply == QMessageBox.StandardButton.Yes:
                 try:
                     cursor = self.db_conn.cursor()
+                    # ⬅️ **수정된 부분**: 시간대 변환 없이 예약을 취소합니다.
                     cursor.execute("""
                         UPDATE reservations SET reservation_status = 'CANCELED' 
                         WHERE uid = %s AND start_time = %s
-                    """, (res_uid, start_time_utc))
+                    """, (res_uid, start_time))
                     self.db_conn.commit()
                     self.update_reservations()
                 except Exception as e:
