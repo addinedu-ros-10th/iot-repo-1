@@ -228,7 +228,7 @@
     <item>
      <widget class="QPushButton" name="editCancelBtn">
       <property name="text">
-       <string>예약 수정/취소</string>
+       <string>예약 취소</string>
       </property>
      </widget>
     </item>
