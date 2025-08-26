@@ -170,6 +170,7 @@ class ReservationViewer(QDialog):
                 WHERE 1=0
                 """
             )
+            cur.fetchall()   # ← 빈 결과라도 반드시 소비
             cur.close()
         except Exception:
             # 더미 쿼리: 일부 호스트에서 첫 커넥트 지연 방지용. 실패해도 무시.

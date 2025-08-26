@@ -178,6 +178,7 @@ def format_minutes_hms(total_minutes: int | None) -> str:
 # ================== 아두이노 직렬 설정 ==================
 ARDUINO_BAUD = 9600
 SERIAL_TIMEOUT = 1.0
+SERVO_DO_CMD = "OPEN"
 
 class ArduinoController:
     def __init__(self, port_hint: str | None = None, baud: int = ARDUINO_BAUD):
@@ -523,6 +524,10 @@ class MainWindow(BaseClass, UiClass):
             self.openButton.setEnabled(False)
             self.openButton.clicked.connect(self.on_open_clicked)
             self.listPlates.currentTextChanged.connect(self.on_plate_selection_changed)
+        
+        self.doButton = self.findChild(QPushButton, "doButton")
+        if self.doButton:
+            self.doButton.clicked.connect(self.on_do_clicked)    
 
         self.newregisterButton = self.findChild(QPushButton, "newregisterButton")
         if self.newregisterButton:
@@ -701,6 +706,26 @@ class MainWindow(BaseClass, UiClass):
         else:
             QMessageBox.warning(self, "아두이노", "OPEN 명령 전송 실패")
 
+    def on_do_clicked(self):
+        """
+        doButton 전용: 아두이노 서보만 '한 번' 동작시킨다.
+        - 주차 IN/OUT DB 토글 없음
+        - 차량 선택 여부와 무관
+        """
+        try:
+            sent = self.arduino.send(SERVO_DO_CMD)  # 개행은 내부에서 자동으로 붙음
+        except Exception as e:
+            sent = False
+            print(f"[SERVO] error: {e}")
+
+        if sent:
+            # 선택: 로그 리스트에 찍어주기
+            if hasattr(self, "listPlates") and self.listPlates:
+                self.listPlates.addItem(f"[SERVO] {SERVO_DO_CMD} sent")
+        else:
+            QMessageBox.warning(self, "서보", f"'{SERVO_DO_CMD}' 명령 전송 실패(포트 미연결/보드 응답 없음)")
+
+
     # ===== 관리 화면 (토글) =====
     def on_manage_clicked(self):
         if self.tableWidget2.isVisible():
@@ -791,7 +816,7 @@ class MainWindow(BaseClass, UiClass):
 def main():
     app = QApplication(sys.argv)
     w = MainWindow()
-    w.setWindowTitle("Parking ANPR – 실시간 프리뷰/대수/목록 + 자동/수동 OPEN + 관리뷰(토글)")
+    w.setWindowTitle("Parking Management System")
     w.show()
     sys.exit(app.exec())
 
