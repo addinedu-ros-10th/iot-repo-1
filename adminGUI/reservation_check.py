@@ -22,6 +22,10 @@ class ReservationCheckWindow(QMainWindow):
         
         self.connect_db()
         self.handle_expired_reservations()
+        # ▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼
+        # 요청하신 기능: 시작 시 CHECKED_IN 상태인 지난 예약 업데이트
+        self._update_overdue_checkins()
+        # ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
         self.load_users()
         self.load_users_to_combobox()
 
@@ -40,6 +44,41 @@ class ReservationCheckWindow(QMainWindow):
         except mysql.connector.Error as err:
             QMessageBox.critical(self, "오류", f"데이터베이스 연결 실패: {err}")
             sys.exit(1)
+
+    # ▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼
+    # 추가된 메서드
+    # ▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼
+    def _update_overdue_checkins(self):
+        """
+        프로그램 시작 시, 예약 종료 시간이 지났지만 'CHECKED_IN' 상태인 예약을
+        'CHECKED_OUT'으로 상태를 변경합니다.
+        """
+        if not self.db_conn or not self.db_conn.is_connected():
+            return
+            
+        try:
+            cursor = self.db_conn.cursor()
+            now_kst = datetime.now()
+            
+            cursor.execute("""
+                UPDATE reservations
+                SET reservation_status = 'CHECKED_OUT', updated_at = %s
+                WHERE end_time < %s AND reservation_status = 'CHECKED_IN'
+            """, (now_kst, now_kst))
+            
+            # 실제로 변경된 행이 있는지 확인
+            updated_rows = cursor.rowcount
+            self.db_conn.commit()
+            
+            if updated_rows > 0:
+                print(f"{updated_rows}개의 CHECKED_IN 상태의 만료된 예약이 CHECKED_OUT으로 변경되었습니다.")
+                # 사용자에게 알림이 너무 많아지지 않도록 이 부분은 정보성 print로만 남겨둘 수 있습니다.
+                # QMessageBox.information(self, "자동 업데이트", f"{updated_rows}개의 입실 상태였던 만료된 예약이 자동으로 처리되었습니다.")
+        except Exception as e:
+            print(f"CHECKED_IN 상태의 만료된 예약 처리 중 오류 발생: {e}")
+        finally:
+            cursor.close()
+    # ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
 
     def handle_expired_reservations(self):
         """

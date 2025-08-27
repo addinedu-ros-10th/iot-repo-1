@@ -27,6 +27,10 @@ class ReservationWindow(QMainWindow):
         self.users = {}
         
         self.connect_db()
+        # ▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼
+        # 기능: 시작 시 지난 예약 상태 업데이트
+        self._update_overdue_checkins()
+        # ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
 
         # 현재 로컬 시간으로 위젯들의 초기값 설정
         now = datetime.now()
@@ -83,6 +87,36 @@ class ReservationWindow(QMainWindow):
             self.statusbar.showMessage(f"DB 연결 실패: {err}")
             QMessageBox.critical(self, "오류", f"데이터베이스 연결 실패: {err}")
             sys.exit(1)
+
+    # ▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼
+    # 추가된 메서드
+    # ▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼
+    def _update_overdue_checkins(self):
+        """
+        프로그램 시작 시, 예약 종료 시간이 지났지만 여전히 'CHECKED_IN' 상태인
+        예약들을 찾아 'CHECKED_OUT'으로 상태를 변경합니다.
+        """
+        if self.db_conn and self.db_conn.is_connected():
+            try:
+                cursor = self.db_conn.cursor()
+                now = datetime.now()
+                
+                # SQL 쿼리 실행
+                cursor.execute("""
+                    UPDATE reservations 
+                    SET reservation_status = 'CHECKED_OUT' 
+                    WHERE end_time < %s AND reservation_status = 'CHECKED_IN'
+                """, (now,))
+                
+                self.db_conn.commit()
+                
+                # 변경된 행이 있다면 상태바에 메시지 표시
+                if cursor.rowcount > 0:
+                    self.statusbar.showMessage(f"{cursor.rowcount}개의 지난 예약을 'CHECKED_OUT'으로 업데이트했습니다.")
+
+            except Exception as e:
+                self.statusbar.showMessage(f"지난 예약 상태 업데이트 실패: {e}")
+    # ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
 
     def load_users(self):
         """DB에서 모든 사용자 정보를 불러와 딕셔너리에 저장합니다."""

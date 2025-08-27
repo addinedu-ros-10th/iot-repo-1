@@ -24,6 +24,11 @@ class UsageWindow(QMainWindow):
             database="joeffice"
         )
         
+        # ▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼
+        # 요청하신 기능: 시작 시 CHECKED_IN 상태인 지난 예약 업데이트
+        self._update_overdue_checkins()
+        # ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
+        
         self.calendarWidget.setSelectedDate(QDate.currentDate())
         self.calendarWidget.selectionChanged.connect(self.update_usage_table)
         
@@ -32,6 +37,38 @@ class UsageWindow(QMainWindow):
         self.timer.start(15000)
         
         self.update_usage_table()
+
+    # ▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼
+    # 추가된 메서드
+    # ▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼
+    def _update_overdue_checkins(self):
+        """
+        프로그램 시작 시, 예약 종료 시간이 지났지만 'CHECKED_IN' 상태인 예약을
+        'CHECKED_OUT'으로 상태를 변경합니다.
+        """
+        if not self.db_conn.is_connected():
+            return
+            
+        try:
+            cursor = self.db_conn.cursor()
+            now = datetime.now()
+            
+            cursor.execute("""
+                UPDATE reservations
+                SET reservation_status = 'CHECKED_OUT'
+                WHERE end_time < %s AND reservation_status = 'CHECKED_IN'
+            """, (now,))
+            
+            updated_rows = cursor.rowcount
+            self.db_conn.commit()
+            
+            if updated_rows > 0:
+                print(f"{updated_rows}개의 CHECKED_IN 상태의 만료된 예약이 CHECKED_OUT으로 변경되었습니다.")
+        except Exception as e:
+            print(f"CHECKED_IN 상태의 만료된 예약 처리 중 오류 발생: {e}")
+        finally:
+            cursor.close()
+    # ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
 
     def update_usage_table(self):
         if not self.db_conn.is_connected():
