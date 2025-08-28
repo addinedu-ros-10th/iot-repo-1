@@ -4,7 +4,8 @@
   <img src="Asset/00_joeffice_logo.png" alt="Joeffice 로고" width="180" />
 </p>
 
-> **RFID 출입 · 주차 번호판 인식 · 냉난방/조명 제어 · 회의실 예약/출입**을 하나로 묶은 IoT 프로젝트. Python(PyQt6) GUI와 Arduino 센서/액추에이터, MySQL DB로 동작합니다.
+> **RFID 출입 · 주차 번호판 인식 · 냉난방/조명 제어 · 회의실 예약/출입**을 하나로 묶은 IoT 프로젝트입니다. 
+Python(PyQt6) GUI와 Arduino 센서/액추에이터, MySQL DB로 동작합니다.
 
 ---
 
@@ -110,4 +111,4 @@
 
 ---
 
-> ⚠️ 경로 대소문자 주의: 위 README는 폴더명이 **Asset/**(대문자 A)인 경우 기준입니다. 폴더 이름이 `asset/`(소문자)라면 이미지 경로도 소문자로 바꾸거나 폴더명을 맞춰주세요.
+
