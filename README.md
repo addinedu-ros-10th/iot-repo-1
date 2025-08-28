@@ -25,7 +25,6 @@
 * **번호판 인식(YOLOv8) + OCR**로 주차 등록/출입 제어
 * **회의실 예약/인증** → 입실 시 **회의실 냉난방·조명·잠금(서보)** 제어
 
-> 발표자료 기준: 2025‑08‑26 / Team1‑IoT (Joeffice)
 
 ---
 
@@ -58,7 +57,6 @@
 
 ## 시스템 아키텍처
 
-* **클라이언트**: Python(PyQt6) GUI 3종 (`iot_project_parking.py`, `iot_project_access.py`, `iot_project_control.py`)
 * **엣지 디바이스(Arduino)**: RFID(MFRC522), DHT11, RGB LED, 조명 LED, 서보 모터
 * **모델/비전**: YOLOv8 번호판 검출, PaddleOCR(한/영)
 * **데이터베이스**: MySQL — 출입/주차/예약/회차 상태 관리
